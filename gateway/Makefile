@@ -31,6 +31,7 @@ CONTROLLER_IMAGE := $(DOCKER_REGISTRY)/gateway-controller
 POLICY_ENGINE_IMAGE := $(DOCKER_REGISTRY)/policy-engine
 GATEWAY_BUILDER_IMAGE := $(DOCKER_REGISTRY)/gateway-builder
 ROUTER_IMAGE := $(DOCKER_REGISTRY)/gateway-router
+MEDIATION_ENGINE_IMAGE := $(DOCKER_REGISTRY)/mediation-engine
 
 .DEFAULT_GOAL := help
 
@@ -39,40 +40,41 @@ help: ## Show this help message
 	@echo 'Gateway Build System (Version: $(VERSION))'
 	@echo ''
 	@echo 'Build Targets:'
-	@echo '  make build                                      - Build all gateway component Docker images (buildx)'
-	@echo '  make build-local                                - Build all gateway component Docker images locally (faster)'
-	@echo '  make build-controller                           - Build gateway-controller Docker image'
-	@echo '  make build-gateway-builder                      - Build gateway-builder Docker image'
-	@echo '  make build-policy-engine                        - Build policy-engine Docker images'
-	@echo '  make build-router                               - Build router Docker image'
+	@echo '  make build                              - Build all gateway component Docker images (buildx)'
+	@echo '  make build-local                        - Build all gateway component Docker images locally (faster)'
+	@echo '  make build-controller                   - Build gateway-controller Docker image'
+	@echo '  make build-gateway-builder              - Build gateway-builder Docker image'
+	@echo '  make build-policy-engine                - Build policy-engine Docker images'
+	@echo '  make build-router                       - Build router Docker image'
+	@echo '  make build-mediation-engine             - Build mediation-engine Docker image'
 	@echo ''
 	@echo 'Multi-arch Build and Push Targets:'
-	@echo '  make build-and-push-multiarch                   - Build and push all gateway components for multiple architectures'
-	@echo '  make build-and-push-multiarch-controller        - Build and push controller for multiple architectures'
-	@echo '  make build-and-push-multiarch-gateway-builder   - Build and push gateway-builder for multiple architectures'
-	@echo '  make build-and-push-multiarch-policy-engine     - Build and push policy-engine for multiple architectures'
-	@echo '  make build-and-push-multiarch-router            - Build and push router for multiple architectures'
+	@echo '  make build-and-push-multiarch           - Build and push all gateway components for multiple architectures'
+	@echo '  make build-and-push-multiarch-controller - Build and push controller for multiple architectures'
+	@echo '  make build-and-push-multiarch-gateway-builder - Build and push gateway-builder for multiple architectures'
+	@echo '  make build-and-push-multiarch-policy-engine - Build and push policy-engine for multiple architectures'
+	@echo '  make build-and-push-multiarch-router    - Build and push router for multiple architectures'
 	@echo ''
 	@echo 'Test Targets:'
-	@echo '  make test                      - Run all tests'
-	@echo '  make test-controller           - Test gateway-controller'
-	@echo '  make test-policy-engine        - Test policy-engine'
+	@echo '  make test                               - Run all tests'
+	@echo '  make test-controller                    - Test gateway-controller'
+	@echo '  make test-policy-engine                 - Test policy-engine'
 	@echo ''
 	@echo 'Integration Test Targets:'
-	@echo '  make test-integration-all      - Build coverage images and run integration tests'
-	@echo '  make build-coverage            - Build all coverage-instrumented gateway components'
-	@echo '  make build-controller-coverage - Build coverage-instrumented gateway-controller Docker image'
-	@echo '  make test-integration          - Run integration tests'
+	@echo '  make test-integration-all               - Build coverage images and run integration tests'
+	@echo '  make build-coverage                     - Build all coverage-instrumented gateway components'
+	@echo '  make build-controller-coverage          - Build coverage-instrumented gateway-controller Docker image'
+	@echo '  make test-integration                   - Run integration tests'
 	@echo ''
 	@echo 'Clean Targets:'
-	@echo '  make clean                     - Clean all build artifacts'
+	@echo '  make clean                              - Clean all build artifacts'
 
 # Build Targets
 .PHONY: build
-build: build-controller build-gateway-builder build-policy-engine build-router ## Build all gateway components
+build: build-controller build-gateway-builder build-policy-engine build-router build-mediation-engine ## Build all gateway components
 
 .PHONY: build-local
-build-local: build-local-controller build-local-gateway-builder build-local-policy-engine build-local-router ## Build all gateway components locally (faster)
+build-local: build-local-controller build-local-gateway-builder build-local-policy-engine build-local-router build-local-mediation-engine ## Build all gateway components locally (faster)
 
 .PHONY: build-coverage
 build-coverage: build-controller-coverage build-gateway-builder build-policy-engine build-router ## Build all coverage-instrumented gateway components
@@ -121,6 +123,16 @@ build-router: ## Build router Docker image
 build-local-router: ## Build router Docker image locally (faster)
 	@echo "Building router Docker image locally ($(VERSION))..."
 	$(MAKE) -C router build-local VERSION=$(VERSION)
+
+.PHONY: build-mediation-engine
+build-mediation-engine: ## Build mediation-engine Docker image
+	@echo "Building mediation-engine Docker image ($(VERSION))..."
+	$(MAKE) -C mediation-engine build VERSION=$(VERSION)
+
+.PHONY: build-local-mediation-engine
+build-local-mediation-engine: ## Build mediation-engine Docker image locally (faster)
+	@echo "Building mediation-engine Docker image locally ($(VERSION))..."
+	$(MAKE) -C mediation-engine build-local VERSION=$(VERSION)
 
 # Multi-arch Build and Push Targets
 .PHONY: build-and-push-multiarch
@@ -172,3 +184,4 @@ clean: ## Clean all build artifacts
 	$(MAKE) -C gateway-builder clean
 	$(MAKE) -C policy-engine clean
 	$(MAKE) -C router clean
+	$(MAKE) -C mediation-engine clean

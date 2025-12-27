@@ -499,6 +499,14 @@ func (t *Translator) createListener(virtualHosts []*route.VirtualHost, isHTTPS b
 			RouteConfig: routeConfig,
 		},
 		HttpFilters: httpFilters,
+
+		// --- KASIYA ---
+		UpgradeConfigs: []*hcm.HttpConnectionManager_UpgradeConfig{
+			{
+				UpgradeType: "websocket",
+			},
+		},
+		// ------------------------
 	}
 
 	// Add access logs if enabled
