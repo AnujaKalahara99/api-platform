@@ -2,104 +2,75 @@ package ws
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"mediation-engine/pkg/core"
 	"net/http"
-	"sync"
-
-	v1 "mediation-engine/pkg/mediation/v1"
 
 	"github.com/gorilla/websocket"
 )
 
 type WSEntrypoint struct {
-	Port     string
-	clients  map[*websocket.Conn]bool // Set of active connections
-	lock     sync.Mutex
+	name     string
+	port     string
+	clients  map[*websocket.Conn]bool
 	upgrader websocket.Upgrader
+	hub      core.IngressHub // Reference to the engine
 }
 
-func New(port string) *WSEntrypoint {
+func New(name, port string) *WSEntrypoint {
 	return &WSEntrypoint{
-		Port:    port,
-		clients: make(map[*websocket.Conn]bool),
-		upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true }, // Allow all for demo
-		},
+		name:     name,
+		port:     port,
+		clients:  make(map[*websocket.Conn]bool),
+		upgrader: websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }},
 	}
 }
 
-func (w *WSEntrypoint) Name() string { return "WebSocket-Server" }
+func (w *WSEntrypoint) Name() string { return w.name }
+func (w *WSEntrypoint) Type() string { return "websocket" }
 
-// Start acts as the Source: Listens for WS messages and puts them on the Upstream channel
-func (w *WSEntrypoint) Start(ctx context.Context, toBackend chan<- v1.Packet) error {
-	server := &http.Server{Addr: ":" + w.Port}
+// Start listens for traffic and Pushes to Hub
+func (w *WSEntrypoint) Start(ctx context.Context, hub core.IngressHub) error {
+	w.hub = hub // Store reference to hub
 
-	http.HandleFunc("/connect", func(rw http.ResponseWriter, r *http.Request) {
-		conn, err := w.upgrader.Upgrade(rw, r, nil)
-		if err != nil {
-			log.Printf("WS Upgrade Failed: %v", err)
-			return
-		}
+	http.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		conn, _ := w.upgrader.Upgrade(rw, r, nil)
+		w.clients[conn] = true
 
-		w.register(conn)
-		defer w.unregister(conn)
+		defer conn.Close()
 
-		// Read Loop (Ingesting data)
 		for {
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
+				log.Printf("Read error: %v", err)
 				break
 			}
 
-			// Wrap data in Packet and push to Engine
-			select {
-			case toBackend <- v1.Packet{
-				SourceID: fmt.Sprintf("ws-%s", r.RemoteAddr),
+			// ---------------------------------------------------------
+			// LOGGING ADDED HERE
+			log.Printf("[%s] Received message: %s", w.name, string(msg))
+			// ------
+
+			// CONVERT TO ABSTRACT EVENT
+			event := core.Event{
+				SourceID: w.name, // "ws-users"
 				Payload:  msg,
-			}:
-			case <-ctx.Done():
-				return
+				Metadata: map[string]string{"client_ip": r.RemoteAddr},
 			}
+
+			// PUSH TO ENGINE
+			w.hub.Publish(event)
 		}
 	})
 
-	// Handle graceful shutdown of the HTTP server
-	go func() {
-		<-ctx.Done()
-		server.Shutdown(context.Background())
-	}()
-
-	log.Printf("WebSocket listening on ws://localhost:%s/connect", w.Port)
-	return server.ListenAndServe()
+	log.Printf("[%s] WS listening on %s", w.name, w.port)
+	return http.ListenAndServe(w.port, nil)
 }
 
-// SendToClient acts as the Sink: Receives data from Downstream channel and broadcasts to users
-func (w *WSEntrypoint) SendToClient(ctx context.Context, pkt v1.Packet) error {
-	w.lock.Lock()
-	defer w.lock.Unlock()
-
-	// Broadcast to ALL connected clients
+// SendDownstream accepts Abstract Event -> Writes to WS
+func (w *WSEntrypoint) SendDownstream(ctx context.Context, evt core.Event) error {
 	for conn := range w.clients {
-		err := conn.WriteMessage(websocket.TextMessage, pkt.Payload)
-		if err != nil {
-			log.Printf("Write error: %v", err)
-			conn.Close()
-			delete(w.clients, conn)
-		}
+		conn.WriteMessage(websocket.TextMessage, evt.Payload)
 	}
 	return nil
-}
-
-func (w *WSEntrypoint) register(conn *websocket.Conn) {
-	w.lock.Lock()
-	w.clients[conn] = true
-	w.lock.Unlock()
-}
-
-func (w *WSEntrypoint) unregister(conn *websocket.Conn) {
-	w.lock.Lock()
-	delete(w.clients, conn)
-	w.lock.Unlock()
-	conn.Close()
 }

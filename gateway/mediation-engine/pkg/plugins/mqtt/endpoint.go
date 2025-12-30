@@ -2,67 +2,73 @@ package mqtt
 
 import (
 	"context"
-	"fmt"
-	"time"
-
-	v1 "mediation-engine/pkg/mediation/v1"
+	"log"
+	"mediation-engine/pkg/core"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-type MQTTEndpoint struct {
-	BrokerURL string
-	TopicPub  string // Topic to publish data FROM Web
-	TopicSub  string // Topic to listen for data TO Web
-	client    mqtt.Client
+type MqttEndpoint struct {
+	name     string
+	client   mqtt.Client
+	topicIn  string
+	topicOut string
 }
 
-func New(broker, pubTopic, subTopic string) *MQTTEndpoint {
-	opts := mqtt.NewClientOptions().AddBroker(broker).SetClientID("mediation-engine-" + fmt.Sprint(time.Now().Unix()))
+func New(name, broker, topicIn, topicOut string) *MqttEndpoint {
+	opts := mqtt.NewClientOptions().AddBroker(broker).SetClientID("engine-" + name)
 	opts.SetAutoReconnect(true)
-
-	return &MQTTEndpoint{
-		BrokerURL: broker,
-		TopicPub:  pubTopic,
-		TopicSub:  subTopic,
-		client:    mqtt.NewClient(opts),
+	return &MqttEndpoint{
+		name:     name,
+		topicIn:  topicIn,
+		topicOut: topicOut,
+		client:   mqtt.NewClient(opts),
 	}
 }
 
-func (m *MQTTEndpoint) Name() string { return "MQTT5-Adapter" }
+func (m *MqttEndpoint) Name() string { return m.name }
+func (m *MqttEndpoint) Type() string { return "mqtt" }
 
-// Start connects to MQTT and pipes subscribed messages to the Downstream channel
-func (m *MQTTEndpoint) Start(ctx context.Context, fromBackend chan<- v1.Packet) error {
+func (m *MqttEndpoint) Start(ctx context.Context, hub core.IngressHub) error {
 	if token := m.client.Connect(); token.Wait() && token.Error() != nil {
-		return fmt.Errorf("MQTT Connection Failed: %v", token.Error())
+		return token.Error()
 	}
 
-	// Subscribe (Pull Logic)
-	token := m.client.Subscribe(m.TopicSub, 0, func(client mqtt.Client, msg mqtt.Message) {
-		// Convert MQTT Msg -> Internal Packet
-		select {
-		case fromBackend <- v1.Packet{
-			SourceID: "mqtt-broker",
+	// Subscribe (Downstream -> Engine)
+	m.client.Subscribe(m.topicOut, 0, func(client mqtt.Client, msg mqtt.Message) {
+		hub.Publish(core.Event{
+			SourceID: m.name,
 			Payload:  msg.Payload(),
 			Metadata: map[string]string{"topic": msg.Topic()},
-		}:
-		case <-ctx.Done():
-		}
+		})
 	})
 
-	if token.Wait() && token.Error() != nil {
-		return fmt.Errorf("MQTT Subscribe Failed: %v", token.Error())
-	}
-
-	// Block here until context dies to keep connection alive in this goroutine
+	// Keep connection alive
 	<-ctx.Done()
 	m.client.Disconnect(250)
 	return nil
 }
 
-// Publish takes data from Upstream channel and pushes to MQTT
-func (m *MQTTEndpoint) Publish(ctx context.Context, pkt v1.Packet) error {
-	token := m.client.Publish(m.TopicPub, 0, false, pkt.Payload)
+// func (m *MqttEndpoint) SendUpstream(ctx context.Context, evt core.Event) error {
+// 	token := m.client.Publish(m.topicIn, 0, false, evt.Payload)
+// 	token.Wait()
+// 	return token.Error()
+// }
+
+func (m *MqttEndpoint) SendUpstream(ctx context.Context, evt core.Event) error {
+	// 1. Log the attempt before sending
+	log.Printf("[MQTT] Publishing to topic '%s'. Payload: %s", m.topicIn, string(evt.Payload))
+
+	token := m.client.Publish(m.topicIn, 0, false, evt.Payload)
 	token.Wait()
-	return token.Error()
+
+	// 2. Check for errors and log accordingly
+	if err := token.Error(); err != nil {
+		log.Printf("[MQTT] Failed to publish to '%s': %v", m.topicIn, err)
+		return err
+	}
+
+	// 3. Log success
+	log.Printf("[MQTT] Successfully published to '%s'", m.topicIn)
+	return nil
 }

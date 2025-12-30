@@ -2,42 +2,75 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
-	"mediation-engine/internal/engine"
-	"mediation-engine/pkg/plugins/mqtt"
-	"mediation-engine/pkg/plugins/ws"
 	"os"
 	"os/signal"
+	"strings"
+
+	"mediation-engine/internal/engine"
+	"mediation-engine/internal/policy"
+	"mediation-engine/pkg/config"
+	"mediation-engine/pkg/plugins/kafka"
+	"mediation-engine/pkg/plugins/mqtt"
+	"mediation-engine/pkg/plugins/sse"
+	"mediation-engine/pkg/plugins/ws"
 )
 
 func main() {
-	log.Println("Initializing Mediation Engine... hoooooo")
+	fmt.Println("Starting gateway-mediation-engine:v2")
+	// 1. Load Config
+	cfg, err := config.Load("config.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// 1. Configure Plugins
+	// 2. Init Hub
+	hub := engine.NewHub(&policy.DefaultEngine{})
 
-	// ENTRYPOINT: WebSocket on port 8080
-	// Clients connect to: ws://localhost:8080/connect
-	wsEntry := ws.New("8066")
-
-	// ENDPOINT: Public MQTT Broker (Eclipse Mosquitto)
-	// - Reads from 'test/topic/sensor' (simulates backend data)
-	// - Writes to 'test/topic/commands' (simulates client commands)
-	mqttEnd := mqtt.New("mqtt://broker.hivemq.com:1883", "test/pub", "test/sub")
-
-	// 2. Configure Router
-	router := engine.NewRouter(wsEntry, mqttEnd)
-
-	// 3. Start Engine
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Run the router (non-blocking here, but Router.Start blocks)
-	go router.Start(ctx)
+	// 3. Register Entrypoints
+	for _, e := range cfg.Entrypoints {
+		switch e.Type {
+		case "websocket":
+			plugin := ws.New(e.Name, e.Port)
+			hub.RegisterEntrypoint(plugin)
+			go plugin.Start(ctx, hub)
+		case "sse":
+			plugin := sse.New(e.Name, e.Port)
+			hub.RegisterEntrypoint(plugin)
+			go plugin.Start(ctx, hub)
+		}
+	}
 
-	// 4. Wait for Ctrl+C
+	// 4. Register Endpoints
+	for _, e := range cfg.Endpoints {
+		switch e.Type {
+		case "kafka":
+			brokers := strings.Split(e.Config["brokers"], ",")
+			plugin := kafka.New(e.Name, brokers, e.Config["topic_in"], e.Config["topic_out"])
+			hub.RegisterEndpoint(plugin)
+			go plugin.Start(ctx, hub)
+		case "mqtt":
+			plugin := mqtt.New(e.Name, e.Config["broker"], e.Config["topic_in"], e.Config["topic_out"])
+			hub.RegisterEndpoint(plugin)
+			go plugin.Start(ctx, hub)
+		}
+	}
+
+	// 5. Load Routes
+	for _, r := range cfg.Routes {
+		hub.AddRoute(r.Source, r.Destination)
+		log.Printf("[Route] %s -> %s", r.Source, r.Destination)
+	}
+
+	// 6. Start Hub
+	go hub.Start(ctx)
+
+	// Wait for Shutdown
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	<-c // Block until signal received
-
-	log.Println("Stopping Engine...")
-	cancel() // Cancel context to stop all plugins
+	<-c
+	cancel()
 }

@@ -98,12 +98,15 @@ services:
       - gateway-network
 
   mediation-engine:
+    image: gateway-mediation-engine:v2
     container_name: mediation-engine
     build:
-      context: ./mediation-engine # Assumes your Go code is in a folder named 'mediation-engine'
+      context: ./mediation-engine
       dockerfile: Dockerfile
     ports:
-      - "8066:8066"  # Maps host 8090 -> container 8080 to avoid conflict with Router
+      - "8066:8066"
+    volumes:
+      - ./mediation-engine/config.yaml:/app/config.yaml:ro
     networks:
       - gateway-network
 
