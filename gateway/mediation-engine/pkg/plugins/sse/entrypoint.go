@@ -32,7 +32,7 @@ func (s *SSEEntrypoint) Start(ctx context.Context, hub core.IngressHub) error {
 	mux := http.NewServeMux()
 
 	// 1. Downstream (Stream to Browser)
-	mux.HandleFunc("/events", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Header().Set("Connection", "keep-alive")

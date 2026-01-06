@@ -2,20 +2,20 @@ version: v1
 
 # 1. Define How Data Enters (Ingress)
 entrypoints:
-  - name: "ws-users"
-    type: "websocket"
-    port: ":8066"
+  # - name: "ws-users"
+  #   type: "websocket"
+  #   port: ":8066"
     
-  # - name: "sse-feed"
-  #   type: "sse"
-  #   port: ":8081"
+  - name: "sse-feed"
+    type: "sse"
+    port: ":8108"
 
 # 2. Define Where Data Goes (Egress)
 endpoints:
   # - name: "kafka-backend"
   #   type: "kafka"
   #   config:
-  #     brokers: "localhost:9092"
+  #     brokers: "redpanda:9092"
   #     topic_in: "web.ingress"
   #     topic_out: "web.egress"
 
@@ -30,17 +30,20 @@ endpoints:
 # This maps sources to destinations. 
 # The future Policy Engine will intercept flows defined here.
 routes:
-  - source: "ws-users"
-    destination: "mqtt-iot"
+  # - source: "ws-users"
+  #   destination: "mqtt-iot"
   
-  - source: "mqtt-iot"
-    destination: "ws-users"  
+  # - source: "mqtt-iot"
+  #   destination: "ws-users"  
   
   # - source: "ws-users"
   #   destination: "kafka-backend"
   
   # - source: "kafka-backend"
   #   destination: "ws-users"
+
+  - source: "mqtt-iot"
+    destination: "sse-feed"
 
   # - source: "sse-feed"
   #   destination: "mqtt-iot"

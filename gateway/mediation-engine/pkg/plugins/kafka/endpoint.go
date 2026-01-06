@@ -50,11 +50,15 @@ func (k *KafkaEndpoint) Start(ctx context.Context, hub core.IngressHub) error {
 	// 3. Read Loop
 	go func() {
 		defer reader.Close()
+		log.Printf("[%s] Kafka listener started on topic: %s", k.name, k.topicOut)
 		for {
 			m, err := reader.ReadMessage(ctx)
 			if err != nil {
+				log.Printf("[%s] Kafka reader error: %v", k.name, err)
 				break
 			}
+
+			log.Printf("[%s] Packet received from topic %s, key: %s, size: %d bytes", k.name, k.topicOut, string(m.Key), len(m.Value))
 
 			// Push to Engine
 			hub.Publish(core.Event{
@@ -71,6 +75,7 @@ func (k *KafkaEndpoint) Start(ctx context.Context, hub core.IngressHub) error {
 
 func (k *KafkaEndpoint) SendUpstream(ctx context.Context, evt core.Event) error {
 	// Write to Kafka Topic
+	log.Printf("[%s] Sending packet to topic %s, key: %s, size: %d bytes", k.name, k.topicIn, evt.ID, len(evt.Payload))
 	return k.writer.WriteMessages(ctx,
 		kafka.Message{
 			Key:   []byte(evt.ID),
