@@ -22,10 +22,18 @@ type ComponentConfig struct {
 	Config map[string]string `yaml:"config"` // Optional (for Endpoints like Broker URL)
 }
 
-// RouteConfig maps a source to a destination
+// RouteConfig maps a source to a destination with optional policies
 type RouteConfig struct {
-	Source      string `yaml:"source"`
-	Destination string `yaml:"destination"`
+	Source      string         `yaml:"source"`
+	Destination string         `yaml:"destination"`
+	Policies    []PolicyConfig `yaml:"policies,omitempty"`
+}
+
+// PolicyConfig defines a policy to apply on a route
+type PolicyConfig struct {
+	Name   string            `yaml:"name"`
+	Type   string            `yaml:"type"`
+	Config map[string]string `yaml:"config,omitempty"`
 }
 
 // Load reads the YAML file and unmarshals it into the Config struct

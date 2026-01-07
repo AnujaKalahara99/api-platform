@@ -11,6 +11,7 @@ import (
 	"mediation-engine/internal/engine"
 	"mediation-engine/internal/policy"
 	"mediation-engine/pkg/config"
+	"mediation-engine/pkg/core"
 	"mediation-engine/pkg/plugins/kafka"
 	"mediation-engine/pkg/plugins/mqtt"
 	"mediation-engine/pkg/plugins/sse"
@@ -19,18 +20,18 @@ import (
 
 func main() {
 	fmt.Println("Starting gateway-mediation-engine:v2")
-	// 1. Load Config
+
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// 2. Init Hub
-	hub := engine.NewHub(&policy.DefaultEngine{})
+	policyEngine := policy.NewEngine()
+	policy.RegisterBuiltinPolicies(policyEngine)
+	hub := engine.NewHub(policyEngine)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// 3. Register Entrypoints
 	for _, e := range cfg.Entrypoints {
 		switch e.Type {
 		case "websocket":
@@ -44,7 +45,6 @@ func main() {
 		}
 	}
 
-	// 4. Register Endpoints
 	for _, e := range cfg.Endpoints {
 		switch e.Type {
 		case "kafka":
@@ -59,16 +59,25 @@ func main() {
 		}
 	}
 
-	// 5. Load Routes
 	for _, r := range cfg.Routes {
-		hub.AddRoute(r.Source, r.Destination)
-		log.Printf("[Route] %s -> %s", r.Source, r.Destination)
+		route := &core.Route{
+			Source:      r.Source,
+			Destination: r.Destination,
+			Policies:    make([]core.PolicySpec, len(r.Policies)),
+		}
+		for i, p := range r.Policies {
+			route.Policies[i] = core.PolicySpec{
+				Name:   p.Name,
+				Type:   p.Type,
+				Config: p.Config,
+			}
+		}
+		hub.AddRoute(route)
+		log.Printf("[Route] %s -> %s (policies: %d)", r.Source, r.Destination, len(r.Policies))
 	}
 
-	// 6. Start Hub
 	go hub.Start(ctx)
 
-	// Wait for Shutdown
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	<-c
