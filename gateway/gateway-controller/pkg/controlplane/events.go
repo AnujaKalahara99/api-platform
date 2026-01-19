@@ -42,3 +42,18 @@ type APIDeployedEvent struct {
 	Timestamp     string                  `json:"timestamp"`
 	CorrelationID string                  `json:"correlationId"`
 }
+
+// APIUndeployedEventPayload represents the payload of an API undeployment event
+type APIUndeployedEventPayload struct {
+	APIID       string `json:"apiId"`
+	Environment string `json:"environment"`
+	VHost       string `json:"vhost"`
+}
+
+// APIUndeployedEvent represents the complete API undeployment event
+type APIUndeployedEvent struct {
+	Type          string                    `json:"type"`
+	Payload       APIUndeployedEventPayload `json:"payload"`
+	Timestamp     string                    `json:"timestamp"`
+	CorrelationID string                    `json:"correlationId"`
+}

@@ -31,6 +31,7 @@ import (
 	"github.com/wso2/api-platform/gateway/gateway-controller/pkg/models"
 
 	"github.com/gorilla/websocket"
+	api "github.com/wso2/api-platform/gateway/gateway-controller/pkg/api/generated"
 	"github.com/wso2/api-platform/gateway/gateway-controller/pkg/config"
 	"github.com/wso2/api-platform/gateway/gateway-controller/pkg/storage"
 	"github.com/wso2/api-platform/gateway/gateway-controller/pkg/utils"
@@ -611,7 +612,172 @@ func (c *Client) handleAPIUndeployedEvent(event map[string]interface{}) {
 		zap.Any("timestamp", event["timestamp"]),
 		zap.Any("correlationId", event["correlationId"]),
 	)
-	// TODO: Implement actual API undeployment logic in Phase 6
+
+	// Parse the event into structured format
+	eventBytes, err := json.Marshal(event)
+	if err != nil {
+		c.logger.Error("Failed to marshal event for parsing",
+			zap.Error(err),
+		)
+		return
+	}
+
+	var undeployedEvent APIUndeployedEvent
+	if err := json.Unmarshal(eventBytes, &undeployedEvent); err != nil {
+		c.logger.Error("Failed to parse API undeployment event",
+			zap.Error(err),
+		)
+		return
+	}
+
+	// Extract API ID
+	apiID := undeployedEvent.Payload.APIID
+	if apiID == "" {
+		c.logger.Error("API ID is empty in undeployment event")
+		return
+	}
+
+	c.logger.Info("Processing API undeployment",
+		zap.String("api_id", apiID),
+		zap.String("environment", undeployedEvent.Payload.Environment),
+		zap.String("vhost", undeployedEvent.Payload.VHost),
+		zap.String("correlation_id", undeployedEvent.CorrelationID),
+	)
+
+	// Check if config exists in database first (source of truth when persistent storage is available)
+	var apiConfig *models.StoredConfig
+	if c.db != nil {
+		var err error
+		apiConfig, err = c.db.GetConfig(apiID)
+		if err != nil {
+			c.logger.Warn("API configuration not found in database for undeployment",
+				zap.String("api_id", apiID),
+				zap.Error(err),
+			)
+			// Not an error - the API might already be undeployed
+			return
+		}
+	} else {
+		// Fall back to in-memory store if database is not available
+		var err error
+		apiConfig, err = c.store.Get(apiID)
+		if err != nil {
+			c.logger.Warn("API configuration not found in storage for undeployment",
+				zap.String("api_id", apiID),
+				zap.Error(err),
+			)
+			// Not an error - the API might already be undeployed
+			return
+		}
+	}
+
+	// Delete from database first (only if persistent mode)
+	// Note: ON DELETE CASCADE constraint in schema automatically removes associated api_keys
+	if c.db != nil {
+		if err := c.db.DeleteConfig(apiID); err != nil {
+			c.logger.Error("Failed to delete config from database",
+				zap.String("api_id", apiID),
+				zap.Error(err),
+			)
+			return
+		}
+
+		// Clean up any remaining API keys from database (in case cascade didn't work)
+		if err := c.db.RemoveAPIKeysAPI(apiID); err != nil {
+			c.logger.Warn("Failed to remove API keys from database",
+				zap.String("api_id", apiID),
+				zap.Error(err),
+			)
+		}
+	}
+
+	// Remove API keys from ConfigStore
+	if err := c.store.RemoveAPIKeysByAPI(apiID); err != nil {
+		c.logger.Warn("Failed to remove API keys from ConfigStore",
+			zap.String("api_id", apiID),
+			zap.Error(err),
+		)
+	}
+
+	// Handle async webhook topic deregistration if applicable
+	if apiConfig.Configuration.Kind == api.Asyncwebsub {
+		topicsToUnregister := c.deploymentService.GetTopicsForDelete(*apiConfig)
+
+		var deregErrs int32
+		var wg sync.WaitGroup
+
+		if len(topicsToUnregister) > 0 {
+			wg.Add(1)
+			go func(list []string) {
+				defer wg.Done()
+				c.logger.Info("Starting topic deregistration for undeployed API",
+					zap.Int("total_topics", len(list)),
+					zap.String("api_id", apiID),
+				)
+
+				var childWg sync.WaitGroup
+				for _, topic := range list {
+					childWg.Add(1)
+					go func(topic string) {
+						defer childWg.Done()
+						if err := c.deploymentService.UnregisterTopicWithHub(&http.Client{}, topic, "localhost", 8083, c.logger); err != nil {
+							c.logger.Error("Failed to deregister topic from WebSubHub",
+								zap.Error(err),
+								zap.String("topic", topic),
+								zap.String("api_id", apiID),
+							)
+							atomic.AddInt32(&deregErrs, 1)
+						} else {
+							c.logger.Info("Successfully deregistered topic from WebSubHub",
+								zap.String("topic", topic),
+								zap.String("api_id", apiID),
+							)
+						}
+					}(topic)
+				}
+				childWg.Wait()
+			}(topicsToUnregister)
+		}
+
+		wg.Wait()
+
+		c.logger.Info("Topic lifecycle operations completed",
+			zap.String("api_id", apiID),
+			zap.Int("deregistered", len(topicsToUnregister)),
+			zap.Int("deregister_errors", int(deregErrs)),
+		)
+	}
+
+	// Delete from in-memory store
+	if err := c.store.Delete(apiID); err != nil {
+		c.logger.Error("Failed to delete config from memory store",
+			zap.String("api_id", apiID),
+			zap.Error(err),
+		)
+		return
+	}
+
+	// Update xDS snapshot asynchronously
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := c.snapshotManager.UpdateSnapshot(ctx, undeployedEvent.CorrelationID); err != nil {
+			c.logger.Error("Failed to update xDS snapshot after API undeployment",
+				zap.String("api_id", apiID),
+				zap.Error(err),
+			)
+		} else {
+			c.logger.Info("Successfully updated xDS snapshot after API undeployment",
+				zap.String("api_id", apiID),
+			)
+		}
+	}()
+
+	c.logger.Info("Successfully processed API undeployment event",
+		zap.String("api_id", apiID),
+		zap.String("correlation_id", undeployedEvent.CorrelationID),
+	)
 }
 
 // calculateNextRetryDelay calculates the next retry delay with exponential backoff and jitter
