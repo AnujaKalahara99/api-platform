@@ -1,53 +1,62 @@
 package config
 
 import (
-	"os"
+    "os"
 
-	"gopkg.in/yaml.v3"
+    "gopkg.in/yaml.v3"
 )
 
-// Config represents the top-level structure of config.yaml
 type Config struct {
-	Version     string            `yaml:"version"`
-	Entrypoints []ComponentConfig `yaml:"entrypoints"`
-	Endpoints   []ComponentConfig `yaml:"endpoints"`
-	Routes      []RouteConfig     `yaml:"routes"`
+    Entrypoints []EntrypointConfig `yaml:"entrypoints"`
+    Endpoints   []EndpointConfig   `yaml:"endpoints"`
+    Routes      []RouteConfig      `yaml:"routes"`
+    Session     SessionConfig      `yaml:"session"`
 }
 
-// ComponentConfig is reused for both Entrypoints and Endpoints
-type ComponentConfig struct {
-	Name   string            `yaml:"name"`
-	Type   string            `yaml:"type"`   // e.g., "websocket", "kafka"
-	Port   string            `yaml:"port"`   // Optional (for Entrypoints)
-	Config map[string]string `yaml:"config"` // Optional (for Endpoints like Broker URL)
+type EntrypointConfig struct {
+    Type string `yaml:"type"`
+    Name string `yaml:"name"`
+    Port string `yaml:"port"`
 }
 
-// RouteConfig maps a source to a destination with optional policies
+type EndpointConfig struct {
+    Type   string            `yaml:"type"`
+    Name   string            `yaml:"name"`
+    Config map[string]string `yaml:"config"`
+}
+
 type RouteConfig struct {
-	Source      string         `yaml:"source"`
-	Destination string         `yaml:"destination"`
-	Policies    []PolicyConfig `yaml:"policies,omitempty"`
+    Source      string         `yaml:"source"`
+    Destination string         `yaml:"destination"`
+    Policies    []PolicyConfig `yaml:"policies"`
 }
 
-// PolicyConfig defines a policy to apply on a route
 type PolicyConfig struct {
-	Name   string            `yaml:"name"`
-	Type   string            `yaml:"type"`
-	Config map[string]string `yaml:"config,omitempty"`
+    Name   string            `yaml:"name"`
+    Type   string            `yaml:"type"`
+    Config map[string]string `yaml:"config"`
 }
 
-// Load reads the YAML file and unmarshals it into the Config struct
+type SessionConfig struct {
+    Type  string      `yaml:"type"` // "memory" or "redis"
+    Redis RedisConfig `yaml:"redis"`
+}
+
+type RedisConfig struct {
+    Addr      string `yaml:"addr"`
+    Password  string `yaml:"password"`
+    DB        int    `yaml:"db"`
+    KeyPrefix string `yaml:"keyPrefix"`
+}
+
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	var cfg Config
-	err = yaml.Unmarshal(data, &cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	return &cfg, nil
+    data, err := os.ReadFile(path)
+    if err != nil {
+        return nil, err
+    }
+    var cfg Config
+    if err := yaml.Unmarshal(data, &cfg); err != nil {
+        return nil, err
+    }
+    return &cfg, nil
 }

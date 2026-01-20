@@ -2,22 +2,23 @@ package core
 
 import "context"
 
-// Event is the abstract unit of data.
+// Event represents a message flowing through the mediation engine
 type Event struct {
 	ID       string
 	SourceID string
-	TargetID string
+	ClientID string // NEW: Client identifier for session tracking
 	Payload  []byte
 	Metadata map[string]string
-	Context  context.Context
 }
 
-// Route represents a configured route with policies
-type Route struct {
-	Source      string
-	Destination string
-	Policies    []PolicySpec
-}
+// PolicyAction represents the result of policy evaluation
+type PolicyAction int
+
+const (
+	ActionAllow PolicyAction = iota
+	ActionBlock
+	ActionTransform
+)
 
 // PolicySpec defines a policy configuration
 type PolicySpec struct {
@@ -26,25 +27,11 @@ type PolicySpec struct {
 	Config map[string]string
 }
 
-// PolicyAction tells the Engine what to do with the Event
-type PolicyAction int
-
-const (
-	ActionAllow PolicyAction = iota
-	ActionBlock
-	ActionDrop
-	ActionTransform
-)
-
-// PolicyEngine is the interface for policy evaluation
-type PolicyEngine interface {
-	Evaluate(ctx context.Context, evt Event) (PolicyAction, error)
-}
-
-// RoutePolicyEngine extends PolicyEngine with route-aware evaluation
-type RoutePolicyEngine interface {
-	PolicyEngine
-	EvaluateWithRoute(ctx context.Context, evt Event, route *Route) (PolicyAction, *Event, error)
+// Route defines a routing rule from source to destination
+type Route struct {
+	Source      string
+	Destination string
+	Policies    []PolicySpec
 }
 
 // Policy represents a single executable policy

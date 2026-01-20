@@ -137,7 +137,7 @@ services:
   #     - redpanda
 
   mediation-engine:
-    image: gateway-mediation-engine:v2
+    image: ghcr.io/wso2/api-platform/mediation-engine:0.1.0-SNAPSHOT
     container_name: mediation-engine
     build:
       context: ./mediation-engine

@@ -47,7 +47,7 @@ func (e *Engine) EvaluateWithRoute(ctx context.Context, evt core.Event, route *c
 		if err != nil {
 			return core.ActionBlock, nil, err
 		}
-		if action == core.ActionBlock || action == core.ActionDrop {
+		if action == core.ActionBlock {
 			return action, nil, nil
 		}
 	}

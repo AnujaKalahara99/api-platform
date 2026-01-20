@@ -16,15 +16,36 @@ import (
 	"mediation-engine/pkg/plugins/mqtt"
 	"mediation-engine/pkg/plugins/sse"
 	"mediation-engine/pkg/plugins/ws"
+	"mediation-engine/pkg/session"
 )
 
 func main() {
-	fmt.Println("Starting gateway-mediation-engine:v2")
+	fmt.Println("Starting gateway-mediation-engine:SnapShot")
 
 	cfg, err := config.Load("config.yaml")
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	// Initialize session store
+	// sessionStore, err := session.NewStore(session.Config{
+	// 	Type: session.StoreType(cfg.Session.Type),
+	// 	Redis: session.RedisConfig{
+	// 		Addr:      cfg.Session.Redis.Addr,
+	// 		Password:  cfg.Session.Redis.Password,
+	// 		DB:        cfg.Session.Redis.DB,
+	// 		KeyPrefix: cfg.Session.Redis.KeyPrefix,
+	// 	},
+	// })
+
+	// if err != nil {
+	// 	log.Printf("Warning: Session store init failed, using memory: %v", err)
+	// 	sessionStore = session.NewMemoryStore()
+	// }
+
+	sessionStore := session.NewMemoryStore()
+
+	defer sessionStore.Close()
 
 	policyEngine := policy.NewEngine()
 	policy.RegisterBuiltinPolicies(policyEngine)
@@ -35,7 +56,7 @@ func main() {
 	for _, e := range cfg.Entrypoints {
 		switch e.Type {
 		case "websocket":
-			plugin := ws.New(e.Name, e.Port)
+			plugin := ws.New(e.Name, e.Port).WithSessionStore(sessionStore)
 			hub.RegisterEntrypoint(plugin)
 			go plugin.Start(ctx, hub)
 		case "sse":
