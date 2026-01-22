@@ -56,6 +56,55 @@ func (h *Hub) Start(ctx context.Context) {
 }
 
 func (h *Hub) processEvent(ctx context.Context, evt core.Event) {
+	// Handle lifecycle events
+	if evt.IsLifecycle() {
+		h.handleLifecycleEvent(ctx, evt)
+		return
+	}
+
+	h.routeMessage(ctx, evt)
+}
+
+// handleLifecycleEvent manages client connect/disconnect at endpoints
+func (h *Hub) handleLifecycleEvent(ctx context.Context, evt core.Event) {
+	h.mu.RLock()
+	route, exists := h.routes[evt.SourceID]
+	h.mu.RUnlock()
+
+	if !exists {
+		log.Printf("[Router] No route for lifecycle event from: %s", evt.SourceID)
+		return
+	}
+
+	destName := route.Destination
+
+	// Only handle lifecycle for endpoint destinations
+	endpoint, ok := h.endpoints[destName]
+	if !ok {
+		return
+	}
+
+	switch evt.Type {
+	case core.EventTypeConnect:
+		opts := core.SubscribeOptions{
+			QoS:      2, // Default QoS for delivery guarantees
+			Metadata: evt.Metadata,
+		}
+		if err := endpoint.SubscribeForClient(ctx, evt.ClientID, opts); err != nil {
+			log.Printf("[Router] Failed to subscribe client %s at %s: %v",
+				evt.ClientID, destName, err)
+		}
+
+	case core.EventTypeDisconnect:
+		if err := endpoint.UnsubscribeClient(ctx, evt.ClientID); err != nil {
+			log.Printf("[Router] Failed to unsubscribe client %s at %s: %v",
+				evt.ClientID, destName, err)
+		}
+	}
+}
+
+// routeMessage handles regular message routing
+func (h *Hub) routeMessage(ctx context.Context, evt core.Event) {
 	h.mu.RLock()
 	route, exists := h.routes[evt.SourceID]
 	h.mu.RUnlock()

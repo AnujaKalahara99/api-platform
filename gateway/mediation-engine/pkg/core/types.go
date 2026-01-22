@@ -2,13 +2,26 @@ package core
 
 import "context"
 
+// Event types for lifecycle management
+const (
+	EventTypeMessage    = "message"
+	EventTypeConnect    = "connect"
+	EventTypeDisconnect = "disconnect"
+)
+
 // Event represents a message flowing through the mediation engine
 type Event struct {
 	ID       string
+	Type     string // EventTypeMessage, EventTypeConnect, EventTypeDisconnect
 	SourceID string
-	ClientID string // NEW: Client identifier for session tracking
+	ClientID string
 	Payload  []byte
 	Metadata map[string]string
+}
+
+// IsLifecycle returns true if the event is a lifecycle event
+func (e Event) IsLifecycle() bool {
+	return e.Type == EventTypeConnect || e.Type == EventTypeDisconnect
 }
 
 // PolicyAction represents the result of policy evaluation

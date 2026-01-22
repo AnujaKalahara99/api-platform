@@ -26,6 +26,7 @@ type WSEntrypoint struct {
 	port     string
 	clients  map[string]*clientConn // clientID -> connection
 	sessions core.SessionStore
+	hub      core.IngressHub
 	lock     sync.Mutex
 }
 
@@ -47,6 +48,7 @@ func (w *WSEntrypoint) Name() string { return w.name }
 func (w *WSEntrypoint) Type() string { return "websocket" }
 
 func (w *WSEntrypoint) Start(ctx context.Context, hub core.IngressHub) error {
+	w.hub = hub
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
@@ -82,6 +84,17 @@ func (w *WSEntrypoint) Start(ctx context.Context, hub core.IngressHub) error {
 
 		log.Printf("[%s] Client connected: id=%s total=%d", w.name, identity.ID, len(w.clients))
 
+		// Emit connect lifecycle event
+		hub.Publish(core.Event{
+			Type:     core.EventTypeConnect,
+			SourceID: w.name,
+			ClientID: identity.ID,
+			Metadata: map[string]string{
+				"protocol":    identity.Protocol,
+				"remote_addr": identity.RemoteAddr,
+			},
+		})
+
 		defer w.handleDisconnect(identity.ID)
 
 		// Read loop
@@ -98,6 +111,7 @@ func (w *WSEntrypoint) Start(ctx context.Context, hub core.IngressHub) error {
 			}
 
 			hub.Publish(core.Event{
+				Type:     core.EventTypeMessage,
 				SourceID: w.name,
 				ClientID: identity.ID,
 				Payload:  msg,
@@ -130,6 +144,13 @@ func (w *WSEntrypoint) handleDisconnect(clientID string) {
 	if w.sessions != nil {
 		w.sessions.UpdateState(context.Background(), clientID, core.SessionStateDisconnected)
 	}
+
+	// Emit disconnect lifecycle event
+	w.hub.Publish(core.Event{
+		Type:     core.EventTypeDisconnect,
+		SourceID: w.name,
+		ClientID: clientID,
+	})
 
 	log.Printf("[%s] Client disconnected: id=%s total=%d", w.name, clientID, len(w.clients))
 }
