@@ -118,6 +118,42 @@ func (r *RedisStore) UpdateActivity(ctx context.Context, clientID string) error 
 	return r.Update(ctx, session)
 }
 
+func (r *RedisStore) ListExpired(ctx context.Context, deadline time.Time) ([]*core.Session, error) {
+	var expired []*core.Session
+	var cursor uint64
+	pattern := r.keyPrefix + "*"
+
+	for {
+		keys, nextCursor, err := r.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return nil, fmt.Errorf("scan keys: %w", err)
+		}
+
+		for _, key := range keys {
+			data, err := r.client.Get(ctx, key).Bytes()
+			if err != nil {
+				continue // Key might have expired between SCAN and GET
+			}
+
+			var session core.Session
+			if err := json.Unmarshal(data, &session); err != nil {
+				continue
+			}
+
+			if session.ReconnectionDeadline != nil && session.ReconnectionDeadline.Before(deadline) {
+				expired = append(expired, &session)
+			}
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return expired, nil
+}
+
 func (r *RedisStore) Close() error {
 	return r.client.Close()
 }

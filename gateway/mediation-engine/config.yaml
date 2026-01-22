@@ -43,3 +43,14 @@ routes:
 
   - source: "ws-users"
     destination: "mqtt-iot"
+
+# 4. Session Management & Reconnection
+session:
+  type: "memory"  # or "redis"
+  reconnection_window: "5m"  # Time window for client reconnection
+  cleanup_interval: "30s"    # How often to scan for expired sessions
+  redis:
+    addr: "localhost:6379"
+    password: ""
+    db: 0
+    keyPrefix: "mediation:session:"

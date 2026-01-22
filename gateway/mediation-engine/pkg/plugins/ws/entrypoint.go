@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"mediation-engine/pkg/core"
 
@@ -22,24 +23,40 @@ type clientConn struct {
 }
 
 type WSEntrypoint struct {
-	name     string
-	port     string
-	clients  map[string]*clientConn // clientID -> connection
-	sessions core.SessionStore
-	lock     sync.Mutex
+	name               string
+	port               string
+	clients            map[string]*clientConn // clientID -> connection
+	sessions           core.SessionStore
+	endpoints          map[string]core.LifecycleBinder // Endpoint bindings
+	reconnectionWindow time.Duration                   // Default 5 minutes
+	lock               sync.Mutex
 }
 
 func New(name, port string) *WSEntrypoint {
 	return &WSEntrypoint{
-		name:    name,
-		port:    port,
-		clients: make(map[string]*clientConn),
+		name:               name,
+		port:               port,
+		clients:            make(map[string]*clientConn),
+		endpoints:          make(map[string]core.LifecycleBinder),
+		reconnectionWindow: 5 * time.Minute,
 	}
 }
 
 // WithSessionStore sets the session store for client tracking
 func (w *WSEntrypoint) WithSessionStore(store core.SessionStore) *WSEntrypoint {
 	w.sessions = store
+	return w
+}
+
+// WithEndpoints registers endpoints for lifecycle binding
+func (w *WSEntrypoint) WithEndpoints(endpoints map[string]core.LifecycleBinder) *WSEntrypoint {
+	w.endpoints = endpoints
+	return w
+}
+
+// WithReconnectionWindow sets custom reconnection window
+func (w *WSEntrypoint) WithReconnectionWindow(duration time.Duration) *WSEntrypoint {
+	w.reconnectionWindow = duration
 	return w
 }
 
@@ -66,11 +83,55 @@ func (w *WSEntrypoint) Start(ctx context.Context, hub core.IngressHub) error {
 			return
 		}
 
-		// Create session if store is configured
+		// Handle session and reconnection logic
+		var session *core.Session
 		if w.sessions != nil {
-			session := core.NewSession(identity)
-			if err := w.sessions.Create(r.Context(), session); err != nil {
-				log.Printf("[%s] Session create error: %v", w.name, err)
+			session, err = w.sessions.Get(r.Context(), identity.ID)
+			if err == nil && session.State == core.SessionStateDisconnected {
+				// Existing session - check reconnection window
+				if session.ReconnectionDeadline != nil && time.Now().Before(*session.ReconnectionDeadline) {
+					log.Printf("[%s] Client reconnected within window: %s", w.name, identity.ID)
+
+					// Resume endpoint subscriptions
+					for _, sub := range session.Subscriptions {
+						if binder, exists := w.endpoints[sub.EndpointName]; exists {
+							if err := binder.ResumeClient(r.Context(), identity.ID); err != nil {
+								log.Printf("[%s] Failed to resume endpoint %s for client %s: %v",
+									w.name, sub.EndpointName, identity.ID, err)
+							}
+						}
+					}
+
+					// Update session state
+					session.State = core.SessionStateConnected
+					session.DisconnectedAt = nil
+					session.ReconnectionDeadline = nil
+					session.UpdatedAt = time.Now().UTC()
+					w.sessions.Update(r.Context(), session)
+				} else {
+					// Session expired - cleanup and create new
+					log.Printf("[%s] Session expired for client %s, starting fresh", w.name, identity.ID)
+
+					// Unbind all endpoints
+					for _, sub := range session.Subscriptions {
+						if binder, exists := w.endpoints[sub.EndpointName]; exists {
+							binder.UnbindClient(r.Context(), identity.ID)
+						}
+					}
+
+					// Delete old session
+					w.sessions.Delete(r.Context(), identity.ID)
+
+					// Create new session
+					session = core.NewSession(identity)
+					w.sessions.Create(r.Context(), session)
+				}
+			} else {
+				// New connection - create session
+				session = core.NewSession(identity)
+				if err := w.sessions.Create(r.Context(), session); err != nil {
+					log.Printf("[%s] Session create error: %v", w.name, err)
+				}
 			}
 		}
 
@@ -126,9 +187,24 @@ func (w *WSEntrypoint) handleDisconnect(clientID string) {
 	}
 	w.lock.Unlock()
 
-	// Update session state
+	// Update session state with reconnection window
 	if w.sessions != nil {
-		w.sessions.UpdateState(context.Background(), clientID, core.SessionStateDisconnected)
+		session, err := w.sessions.Get(context.Background(), clientID)
+		if err == nil {
+			now := time.Now().UTC()
+			reconnectionDeadline := now.Add(w.reconnectionWindow)
+
+			session.State = core.SessionStateDisconnected
+			session.DisconnectedAt = &now
+			session.ReconnectionDeadline = &reconnectionDeadline
+			session.UpdatedAt = now
+
+			w.sessions.Update(context.Background(), session)
+
+			log.Printf("[%s] Client disconnected: id=%s total=%d, reconnection window until %s",
+				w.name, clientID, len(w.clients), reconnectionDeadline.Format(time.RFC3339))
+			return
+		}
 	}
 
 	log.Printf("[%s] Client disconnected: id=%s total=%d", w.name, clientID, len(w.clients))

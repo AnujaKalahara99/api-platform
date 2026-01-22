@@ -1,6 +1,9 @@
 package core
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Event represents a message flowing through the mediation engine
 type Event struct {
@@ -32,6 +35,14 @@ type Route struct {
 	Source      string
 	Destination string
 	Policies    []PolicySpec
+}
+
+// Subscription represents an active endpoint binding for a client
+type Subscription struct {
+	EndpointName string            `json:"endpoint_name"`
+	RouteName    string            `json:"route_name"`
+	Params       map[string]string `json:"params,omitempty"`
+	CreatedAt    time.Time         `json:"created_at"`
 }
 
 // Policy represents a single executable policy

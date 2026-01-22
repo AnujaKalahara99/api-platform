@@ -18,13 +18,16 @@ var (
 
 // Session represents a client session with its current state
 type Session struct {
-	ClientID       string            `json:"client_id"`
-	Identity       *ClientIdentity   `json:"identity"`
-	State          string            `json:"state"`
-	CreatedAt      time.Time         `json:"created_at"`
-	UpdatedAt      time.Time         `json:"updated_at"`
-	LastActivityAt time.Time         `json:"last_activity_at"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
+	ClientID             string            `json:"client_id"`
+	Identity             *ClientIdentity   `json:"identity"`
+	State                string            `json:"state"`
+	CreatedAt            time.Time         `json:"created_at"`
+	UpdatedAt            time.Time         `json:"updated_at"`
+	LastActivityAt       time.Time         `json:"last_activity_at"`
+	DisconnectedAt       *time.Time        `json:"disconnected_at,omitempty"`
+	ReconnectionDeadline *time.Time        `json:"reconnection_deadline,omitempty"`
+	Subscriptions        []Subscription    `json:"subscriptions,omitempty"`
+	Metadata             map[string]string `json:"metadata,omitempty"`
 }
 
 // NewSession creates a new session for a client identity
@@ -49,5 +52,6 @@ type SessionStore interface {
 	Delete(ctx context.Context, clientID string) error
 	UpdateState(ctx context.Context, clientID string, state string) error
 	UpdateActivity(ctx context.Context, clientID string) error
+	ListExpired(ctx context.Context, deadline time.Time) ([]*Session, error)
 	Close() error
 }

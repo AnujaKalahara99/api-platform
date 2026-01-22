@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"time"
 
 	"mediation-engine/internal/engine"
 	"mediation-engine/internal/policy"
@@ -47,17 +48,46 @@ func main() {
 
 	defer sessionStore.Close()
 
+	// Parse reconnection window (default 5 minutes)
+	reconnectionWindow := 5 * time.Minute
+	if cfg.Session.ReconnectionWindow != "" {
+		if duration, err := time.ParseDuration(cfg.Session.ReconnectionWindow); err == nil {
+			reconnectionWindow = duration
+		} else {
+			log.Printf("Warning: Invalid reconnection_window '%s', using default 5m", cfg.Session.ReconnectionWindow)
+		}
+	}
+
+	// Parse cleanup interval (default 30 seconds)
+	cleanupInterval := 30 * time.Second
+	if cfg.Session.CleanupInterval != "" {
+		if duration, err := time.ParseDuration(cfg.Session.CleanupInterval); err == nil {
+			cleanupInterval = duration
+		} else {
+			log.Printf("Warning: Invalid cleanup_interval '%s', using default 30s", cfg.Session.CleanupInterval)
+		}
+	}
+
 	policyEngine := policy.NewEngine()
 	policy.RegisterBuiltinPolicies(policyEngine)
-	hub := engine.NewHub(policyEngine)
+	hub := engine.NewHub(policyEngine).WithSessionStore(sessionStore)
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	// Track endpoints that support lifecycle binding
+	lifecycleBinders := make(map[string]core.LifecycleBinder)
+
+	// Track WebSocket entrypoints for later wiring
+	wsEntrypoints := make([]*ws.WSEntrypoint, 0)
 
 	for _, e := range cfg.Entrypoints {
 		switch e.Type {
 		case "websocket":
-			plugin := ws.New(e.Name, e.Port).WithSessionStore(sessionStore)
+			plugin := ws.New(e.Name, e.Port).
+				WithSessionStore(sessionStore).
+				WithReconnectionWindow(reconnectionWindow)
 			hub.RegisterEntrypoint(plugin)
+			wsEntrypoints = append(wsEntrypoints, plugin)
 			go plugin.Start(ctx, hub)
 		case "sse":
 			plugin := sse.New(e.Name, e.Port)
@@ -76,6 +106,7 @@ func main() {
 		case "mqtt":
 			plugin := mqtt.New(e.Name, e.Config["broker"], e.Config["topic_in"], e.Config["topic_out"])
 			hub.RegisterEndpoint(plugin)
+			lifecycleBinders[e.Name] = plugin // MQTT supports lifecycle binding
 			go plugin.Start(ctx, hub)
 		}
 	}
@@ -96,6 +127,16 @@ func main() {
 		hub.AddRoute(route)
 		log.Printf("[Route] %s -> %s (policies: %d)", r.Source, r.Destination, len(r.Policies))
 	}
+
+	// Wire endpoints to WebSocket entrypoints for lifecycle binding
+	for _, wsEntry := range wsEntrypoints {
+		wsEntry.WithEndpoints(lifecycleBinders)
+		log.Printf("[Binding] Wired %d endpoints to WebSocket entrypoint %s", len(lifecycleBinders), wsEntry.Name())
+	}
+
+	// Start cleanup worker
+	cleanupWorker := session.NewCleanupWorker(sessionStore, lifecycleBinders, cleanupInterval)
+	go cleanupWorker.Start(ctx)
 
 	go hub.Start(ctx)
 

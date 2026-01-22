@@ -99,6 +99,22 @@ func (m *MemoryStore) UpdateActivity(ctx context.Context, clientID string) error
 	return nil
 }
 
+func (m *MemoryStore) ListExpired(ctx context.Context, deadline time.Time) ([]*core.Session, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.closed {
+		return nil, core.ErrStoreClosed
+	}
+
+	var expired []*core.Session
+	for _, session := range m.sessions {
+		if session.ReconnectionDeadline != nil && session.ReconnectionDeadline.Before(deadline) {
+			expired = append(expired, session)
+		}
+	}
+	return expired, nil
+}
+
 func (m *MemoryStore) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
