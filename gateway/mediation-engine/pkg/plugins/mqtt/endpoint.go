@@ -13,12 +13,13 @@ import (
 
 // clientSession tracks a per-client MQTT connection
 type clientSession struct {
-	clientID string
-	client   mqtt.Client
-	topic    string
-	qos      byte
-	cancel   context.CancelFunc
-	ctx      context.Context // Store the parent context for resubscription
+	clientID    string
+	client      mqtt.Client
+	topic       string // Original topic (without $share prefix)
+	sharedTopic string // Full shared subscription topic
+	qos         byte
+	cancel      context.CancelFunc
+	ctx         context.Context // Store the parent context for resubscription
 }
 
 type MqttEndpoint struct {
@@ -54,6 +55,12 @@ func (m *MqttEndpoint) Start(ctx context.Context, hub core.IngressHub) error {
 	return nil
 }
 
+// buildSharedTopic constructs the MQTT 5.0 shared subscription topic
+// Format: $share/{clientID}/{topic}
+func (m *MqttEndpoint) buildSharedTopic(clientID, topic string) string {
+	return fmt.Sprintf("$share/%s/%s", clientID, topic)
+}
+
 // SubscribeForClient creates a dedicated MQTT client with persistent session for each user
 func (m *MqttEndpoint) SubscribeForClient(ctx context.Context, clientID string, opts core.SubscribeOptions) error {
 	m.mu.Lock()
@@ -69,6 +76,9 @@ func (m *MqttEndpoint) SubscribeForClient(ctx context.Context, clientID string, 
 		qos = 1 // Default to QoS 1 for delivery guarantees
 	}
 
+	// Build the shared subscription topic
+	sharedTopic := m.buildSharedTopic(clientID, topic)
+
 	// Check if session exists
 	if session, exists := m.clientSessions[clientID]; exists {
 		if session.client.IsConnected() {
@@ -79,14 +89,14 @@ func (m *MqttEndpoint) SubscribeForClient(ctx context.Context, clientID string, 
 		if session.cancel != nil {
 			session.cancel()
 		}
-		return m.reconnectAndResubscribe(ctx, session, topic, byte(qos))
+		return m.reconnectAndResubscribe(ctx, session, topic, sharedTopic, byte(qos))
 	}
 
-	return m.createNewSession(ctx, clientID, topic, byte(qos))
+	return m.createNewSession(ctx, clientID, topic, sharedTopic, byte(qos))
 }
 
 // createNewSession creates a brand new MQTT client and subscription
-func (m *MqttEndpoint) createNewSession(ctx context.Context, clientID, topic string, qos byte) error {
+func (m *MqttEndpoint) createNewSession(ctx context.Context, clientID, topic, sharedTopic string, qos byte) error {
 	subCtx, cancel := context.WithCancel(ctx)
 
 	// Create dedicated MQTT client for this user
@@ -98,7 +108,7 @@ func (m *MqttEndpoint) createNewSession(ctx context.Context, clientID, topic str
 		SetOnConnectHandler(func(client mqtt.Client) {
 			log.Printf("[%s] Client %s connected/reconnected to broker", m.name, clientID)
 			// Resubscribe on reconnect - MQTT library will call this on auto-reconnect
-			m.resubscribeOnConnect(clientID, topic, qos)
+			m.resubscribeOnConnect(clientID)
 		}).
 		SetConnectionLostHandler(func(client mqtt.Client, err error) {
 			log.Printf("[%s] Client %s connection lost: %v", m.name, clientID, err)
@@ -114,34 +124,36 @@ func (m *MqttEndpoint) createNewSession(ctx context.Context, clientID, topic str
 
 	// Store session first (needed for resubscribeOnConnect)
 	m.clientSessions[clientID] = &clientSession{
-		clientID: clientID,
-		client:   mqttClient,
-		topic:    topic,
-		qos:      qos,
-		cancel:   cancel,
-		ctx:      ctx,
+		clientID:    clientID,
+		client:      mqttClient,
+		topic:       topic,
+		sharedTopic: sharedTopic,
+		qos:         qos,
+		cancel:      cancel,
+		ctx:         ctx,
 	}
 
-	// Subscribe with QoS
-	if err := m.subscribeWithHandler(subCtx, mqttClient, clientID, topic, qos); err != nil {
+	// Subscribe to the shared topic
+	if err := m.subscribeWithHandler(subCtx, mqttClient, clientID, sharedTopic, qos); err != nil {
 		delete(m.clientSessions, clientID)
 		cancel()
 		mqttClient.Disconnect(250)
 		return err
 	}
 
-	log.Printf("[%s] Client %s connected with persistent session, subscribed to %s (QoS %d)",
-		m.name, clientID, topic, qos)
+	log.Printf("[%s] Client %s connected with persistent session, subscribed to shared topic %s (QoS %d)",
+		m.name, clientID, sharedTopic, qos)
 	return nil
 }
 
 // reconnectAndResubscribe handles reconnection of an existing session
-func (m *MqttEndpoint) reconnectAndResubscribe(ctx context.Context, session *clientSession, topic string, qos byte) error {
+func (m *MqttEndpoint) reconnectAndResubscribe(ctx context.Context, session *clientSession, topic, sharedTopic string, qos byte) error {
 	// Create new context for the reconnected session
 	subCtx, cancel := context.WithCancel(ctx)
 	session.cancel = cancel
 	session.ctx = ctx
 	session.topic = topic
+	session.sharedTopic = sharedTopic
 	session.qos = qos
 
 	// Reconnect
@@ -150,46 +162,49 @@ func (m *MqttEndpoint) reconnectAndResubscribe(ctx context.Context, session *cli
 		return fmt.Errorf("reconnect failed for %s: %w", session.clientID, token.Error())
 	}
 
-	// Resubscribe with fresh context
-	if err := m.subscribeWithHandler(subCtx, session.client, session.clientID, topic, qos); err != nil {
+	// Resubscribe to shared topic with fresh context
+	if err := m.subscribeWithHandler(subCtx, session.client, session.clientID, sharedTopic, qos); err != nil {
 		cancel()
 		return err
 	}
 
-	log.Printf("[%s] Client %s reconnected and resubscribed to %s (QoS %d)",
-		m.name, session.clientID, topic, qos)
+	log.Printf("[%s] Client %s reconnected and resubscribed to shared topic %s (QoS %d)",
+		m.name, session.clientID, sharedTopic, qos)
 	return nil
 }
 
 // subscribeWithHandler creates subscription with proper message handler
-func (m *MqttEndpoint) subscribeWithHandler(ctx context.Context, client mqtt.Client, clientID, topic string, qos byte) error {
+func (m *MqttEndpoint) subscribeWithHandler(ctx context.Context, client mqtt.Client, clientID, subscriptionTopic string, qos byte) error {
 	handler := func(c mqtt.Client, msg mqtt.Message) {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			log.Printf("[%s] Received message for client %s on topic %s: %s",
-				m.name, clientID, msg.Topic(), string(msg.Payload()))
+			log.Printf("[%s] Received message for client %s on topic %s (subscribed via %s): %s",
+				m.name, clientID, msg.Topic(), subscriptionTopic, string(msg.Payload()))
 			m.hub.Publish(core.Event{
 				Type:     core.EventTypeMessage,
 				SourceID: m.name,
 				ClientID: clientID,
 				Payload:  msg.Payload(),
-				Metadata: map[string]string{"topic": msg.Topic()},
+				Metadata: map[string]string{
+					"topic":             msg.Topic(),
+					"subscriptionTopic": subscriptionTopic,
+				},
 			})
 		}
 	}
 
-	token := client.Subscribe(topic, qos, handler)
+	token := client.Subscribe(subscriptionTopic, qos, handler)
 	if token.Wait() && token.Error() != nil {
-		return fmt.Errorf("subscribe failed for %s: %w", clientID, token.Error())
+		return fmt.Errorf("subscribe to shared topic failed for %s: %w", clientID, token.Error())
 	}
 
 	return nil
 }
 
 // resubscribeOnConnect is called by the MQTT library's OnConnect handler during auto-reconnect
-func (m *MqttEndpoint) resubscribeOnConnect(clientID, topic string, qos byte) {
+func (m *MqttEndpoint) resubscribeOnConnect(clientID string) {
 	m.mu.RLock()
 	session, exists := m.clientSessions[clientID]
 	m.mu.RUnlock()
@@ -208,10 +223,13 @@ func (m *MqttEndpoint) resubscribeOnConnect(clientID, topic string, qos byte) {
 	session.cancel = cancel
 	m.mu.Unlock()
 
-	if err := m.subscribeWithHandler(subCtx, session.client, clientID, topic, qos); err != nil {
-		log.Printf("[%s] Failed to resubscribe client %s: %v", m.name, clientID, err)
+	// Resubscribe to the shared topic
+	if err := m.subscribeWithHandler(subCtx, session.client, clientID, session.sharedTopic, session.qos); err != nil {
+		log.Printf("[%s] Failed to resubscribe client %s to shared topic %s: %v",
+			m.name, clientID, session.sharedTopic, err)
 	} else {
-		log.Printf("[%s] Client %s resubscribed to %s after reconnect", m.name, clientID, topic)
+		log.Printf("[%s] Client %s resubscribed to shared topic %s after reconnect",
+			m.name, clientID, session.sharedTopic)
 	}
 }
 
@@ -233,8 +251,8 @@ func (m *MqttEndpoint) UnsubscribeClient(ctx context.Context, clientID string) e
 
 	// Keep session in map for potential reconnection
 	// Remove only on explicit cleanup or after timeout
-	log.Printf("[%s] Client %s disconnected (broker will queue messages for reconnection)",
-		m.name, clientID)
+	log.Printf("[%s] Client %s disconnected (broker will queue messages on shared topic %s for reconnection)",
+		m.name, clientID, session.sharedTopic)
 	return nil
 }
 
@@ -245,7 +263,7 @@ func (m *MqttEndpoint) cleanupAllSessions() {
 		session.cancel()
 		session.client.Disconnect(250)
 		delete(m.clientSessions, clientID)
-		log.Printf("[%s] Cleaned up session for %s", m.name, clientID)
+		log.Printf("[%s] Cleaned up session for %s (shared topic: %s)", m.name, clientID, session.sharedTopic)
 	}
 }
 
@@ -261,7 +279,7 @@ func (m *MqttEndpoint) SendUpstream(ctx context.Context, evt core.Event) error {
 	log.Printf("[MQTT] Client %s publishing to topic '%s'. Payload: %s",
 		evt.ClientID, m.topicIn, string(evt.Payload))
 
-	token := session.client.Publish(m.topicIn, 2, false, evt.Payload) // QoS 2
+	token := session.client.Publish(m.topicIn, 1, false, evt.Payload) // QoS 1
 	token.Wait()
 
 	if err := token.Error(); err != nil {

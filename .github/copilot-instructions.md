@@ -1,182 +1,150 @@
 # WSO2 API Platform - Copilot Instructions
 
-## Architecture Overview
+## Architecture
 
-This is a **multi-component API platform** with independent, Docker-distributed components. Key architectural decisions:
-
-- **GitOps-ready**: All configs (API specs, gateway configs) are YAML-first
-- **Envoy-based Gateway**: Router uses Envoy Proxy; Policy Engine extends via `ext_proc` filter
-- **xDS Protocol**: Gateway-Controller pushes configs to Router via gRPC (port 18000)
-- **MCP-enabled**: Components expose Model Context Protocol for AI agent integration
-
-### Component Boundaries
+Multi-component API platform with Docker-distributed, independently deployable services:
 
 ```
-platform-api (9243)     → Backend for Management/Developer portals, org/project/gateway CRUD
-gateway-controller (9090/18000) → xDS control plane, API config validation & persistence
-policy-engine (9002)    → ext_proc service for request/response policy chains
-router (8080/8443)      → Envoy Proxy data plane
-mediation-engine        → Event-driven async protocol bridging (WS, SSE, Kafka, MQTT)
+platform-api (9243)         → Backend for portals, org/project/gateway CRUD
+gateway-controller (9090)   → xDS control plane, API config validation (gRPC:18000)
+policy-engine (9002)        → Envoy ext_proc filter for policy execution
+router (8080/8443)          → Envoy Proxy data plane
+mediation-engine            → Async protocol bridging (WS, SSE → Kafka, MQTT)
 ```
 
-### Data Flow
+**Data flow**: API YAML → gateway-controller validates → xDS push to router → router invokes policy-engine via ext_proc
 
-1. User submits API YAML → Gateway-Controller validates & persists
-2. Gateway-Controller translates to xDS resources → pushes to Router via gRPC
-3. Router routes traffic; invokes Policy Engine via ext_proc for policy execution
-
-## Build & Development
-
-### Quick Start (Full Stack)
+## Quick Start
 
 ```bash
+# Full stack (includes portals, PostgreSQL)
 cd distribution/all-in-one && docker compose up --build
+
+# Gateway-only development
+cd gateway && make build-local && docker compose up -d
 ```
 
-### Gateway-Only Development
+## Go Module Pattern
 
-```bash
-cd gateway
-make build-local           # Build all gateway images locally (fastest)
-docker compose up -d       # Start gateway stack
-make test-integration-all  # Run BDD integration tests with coverage
-```
-
-### Component-Specific Builds
-
-```bash
-# Gateway components (from gateway/)
-make build-local-controller
-make build-local-policy-engine
-make build-local-router
-make build-local-mediation-engine
-
-# CLI (from cli/src/)
-make build              # Single OS
-make build-all          # Cross-platform
-```
-
-## Go Module Structure
-
-Components use `replace` directives for local development:
-
+Components use `replace` directives for local shared modules:
 ```go
-// In component go.mod:
 replace github.com/wso2/api-platform/common => ../common
 replace github.com/wso2/api-platform/sdk => ../sdk
 ```
-
-- **common/**: Shared authenticators, models, constants, errors
-- **sdk/**: Gateway SDK utilities
+- `common/`: Shared authenticators, models, constants, errors
+- `sdk/`: Gateway SDK utilities
 
 ## API Configuration Format
 
-All API configs follow this structure (see [gateway/examples/](gateway/examples/)):
-
+All API configs use this CRD-style YAML (examples in [gateway/examples/](gateway/examples/)):
 ```yaml
 apiVersion: gateway.api-platform.wso2.com/v1alpha1
 kind: RestApi
 metadata:
-  name: api-name-version
+  name: weather-api-v1.0
 spec:
-  displayName: Human Name
-  version: v1.0
-  context: /base/$version     # $version is variable substitution
+  context: /weather/$version    # $version substitution supported
   upstream:
     main:
-      url: https://backend:port/path
+      url: http://backend:5000/api/v2
+  policies:                     # API-level or operation-level
+    - name: apiKeyValidation
+      version: v1.0.0
+      executionCondition: "request.metadata[authenticated] != true"  # CEL
+      params: { header: "X-API-Key" }
   operations:
     - method: GET
-      path: /resource/{id}
-      policies:               # Operation-level policies
-        - name: policy-name
-          version: v1.0.0
-          params: {}
+      path: /{country_code}/{city}
 ```
 
-## Policy Engine Pattern
+## Policy Engine
 
-**Critical**: Policy Engine ships with NO built-in policies. All policies compiled via Gateway Builder:
-
+**Critical**: Policy Engine has ZERO built-in policies. All policies compiled via Gateway Builder:
 ```bash
-# Build custom policies
 docker run --rm \
     -v $(pwd)/sample-policies:/workspace/sample-policies \
     -v $(pwd)/policy-manifest.yaml:/workspace/policy-manifest.yaml \
     -v $(pwd)/output:/workspace/output \
     wso2/api-platform/gateway-builder:latest
 ```
+See [gateway/sample-policies/](gateway/sample-policies/) for reference implementations.
 
-Policy interface ([gateway/policy-engine/](gateway/policy-engine/)):
+## Mediation Engine (Async Protocol Bridging)
+
+Event-driven architecture for bidirectional protocol bridging. Located in [gateway/mediation-engine/](gateway/mediation-engine/).
+
+Mediation Engine Architecture The Mediation Engine is a modular system that bridges web protocols (WebSocket, SSE, Webhooks) and event brokers (Kafka, MQTT, Solace) by converting all traffic into a protocol-agnostic Abstract Data Type (ADT). It connects defined Entrypoints to Endpoints via internal routes. Since upstream proxies (Envoy/WSO2) only validate the initial connection handshake, the Mediation Engine must enforce its own policies on individual data packets. All implementations must preserve this abstraction and include a resiliency layer to ensure delivery guarantees and data integrity during translation.
+
+### Core Architecture
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Entrypoints   │────▶│       Hub        │────▶│    Endpoints    │
+│ (WS, SSE)       │     │  (Central Router)│     │ (Kafka, MQTT)   │
+│ Accept traffic  │◀────│  Policy chains   │◀────│ Backend systems │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+```
+
+**Flow**: Entrypoint receives → Hub.Publish() → Route lookup → Policy evaluation → Endpoint.SendUpstream() or Entrypoint.SendDownstream()
+
+### Key Interfaces ([pkg/core/interfaces.go](gateway/mediation-engine/pkg/core/interfaces.go))
+
+
+### Event Structure ([pkg/core/types.go](gateway/mediation-engine/pkg/core/types.go))
+
 ```go
-type Policy interface {
-    Name() string
-    Type() string
-    Execute(ctx context.Context, evt *Event, config map[string]string) (PolicyAction, error)
+type Event struct {
+    ID       string
+    SourceID string            // Matches route.Source in config
+    ClientID string            // Session tracking
+    Payload  []byte
+    Metadata map[string]string
 }
 ```
 
-## Mediation Engine (Async Protocols)
+### Configuration Format ([config.yaml](gateway/mediation-engine/config.yaml))
 
-Event-driven architecture for protocol bridging ([gateway/mediation-engine/](gateway/mediation-engine/)):
+### Built-in Policies ([internal/policy/policies.go](gateway/mediation-engine/internal/policy/policies.go))
 
-- **Entrypoints** (sources): WebSocket, SSE - accept external traffic
-- **Endpoints** (sinks): Kafka, MQTT - connect to backends
-- **Hub**: Routes events through policy chains
+- `filter`: Block events matching `block_pattern` in payload
+- `transform`: Add prefix to payload or headers to metadata
+- `rate-limit`: (placeholder implementation)
 
-```go
-// Core interfaces in pkg/core/interfaces.go
-type Entrypoint interface {
-    Start(ctx context.Context, hub IngressHub) error
-    SendDownstream(ctx context.Context, evt Event) error
-}
+Register custom policies via `policy.Engine.RegisterPolicy()`.
+
+### Running Mediation Engine
+
+```bash
+cd gateway
+make build-local-mediation-engine
+docker compose up mediation-engine
 ```
 
 ## Testing
 
-### Integration Tests (BDD with Godog)
-
 ```bash
-cd gateway/it
-make test-all     # Build coverage images + run tests
+# Gateway integration tests (BDD with Godog)
+cd gateway && make test-integration-all
 
 # Run specific scenario
-go test -v ./... -godog.tags="@wip"
-```
+cd gateway/it && go test -v ./... -godog.tags="@wip"
 
-Feature files in `gateway/it/features/` - see [gateway/it/CONTRIBUTING.md](gateway/it/CONTRIBUTING.md) for writing tests.
-
-### Unit Tests
-
-```bash
-make test                    # Gateway tests (from gateway/)
+# Unit tests
+cd gateway && make test
 cd platform-api/src && go test ./...
 cd cli/src && make test
 ```
 
+Integration test features in [gateway/it/features/](gateway/it/features/) - see [gateway/it/CONTRIBUTING.md](gateway/it/CONTRIBUTING.md) for writing tests.
+
 ## Portals
 
-- **Management Portal** (5173): React + TypeScript + Vite
-- **Developer Portal** (3001): Node.js, requires PostgreSQL
+- **Management Portal** (5173): React + TypeScript + Vite - in `portals/management-portal/`
+- **Developer Portal** (3001): Node.js, requires PostgreSQL - in `portals/developer-portal/`
 
-Both require Platform API running. Quick setup:
-```bash
-cd distribution/all-in-one && docker compose up
-```
+## Key Conventions
 
-## Version Management
-
-```bash
-make version                           # Show all versions
-make version-set COMPONENT=gateway VERSION_ARG=1.2.0
-make version-bump-patch COMPONENT=gateway
-```
-
-Versions tracked in `VERSION` files: root, `gateway/VERSION`, `platform-api/VERSION`
-
-## Documentation Standards
-
-Follow [guidelines/DOCUMENTATION.md](guidelines/DOCUMENTATION.md):
-- Component README: Quick start only, link to `spec/` for details
-- `spec/constitution.md`: Core principles for major components
-- Specs link requirements to implementation features
+- **YAML-first configs**: GitOps-ready, all API/gateway configs are YAML
+- **Component independence**: No hard dependencies between components
+- **Version files**: Track versions in `VERSION` files (root, `gateway/VERSION`, `platform-api/VERSION`)
+- **Documentation**: README has quick start only; detailed specs in `spec/` directories
