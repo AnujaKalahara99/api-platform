@@ -16,6 +16,7 @@ import (
 	"mediation-engine/pkg/plugins/mqtt"
 	"mediation-engine/pkg/plugins/sse"
 	"mediation-engine/pkg/plugins/ws"
+	"mediation-engine/pkg/retention"
 	"mediation-engine/pkg/session"
 )
 
@@ -47,9 +48,32 @@ func main() {
 
 	defer sessionStore.Close()
 
+	// Initialize retention store
+	var retentionStore core.RetentionStore
+	retentionConfig := core.RetentionConfig{
+		Enabled:      cfg.Retention.Enabled,
+		Mode:         core.RetentionMode(cfg.Retention.Mode),
+		Store:        cfg.Retention.Store,
+		RedisAddr:    cfg.Retention.RedisAddr,
+		TTL:          cfg.Retention.ParseTTL(),
+		MaxPerClient: cfg.Retention.MaxPerClient,
+		ClientExpiry: cfg.Retention.ParseClientExpiry(),
+	}
+
+	if cfg.Retention.Enabled {
+		retentionStore, err = retention.NewStore(retentionConfig)
+		if err != nil {
+			log.Printf("Warning: Retention store init failed: %v", err)
+		} else {
+			log.Printf("[Retention] Store initialized: type=%s, mode=%s, ttl=%v",
+				cfg.Retention.Store, cfg.Retention.Mode, retentionConfig.TTL)
+			defer retentionStore.Close()
+		}
+	}
+
 	policyEngine := policy.NewEngine()
 	policy.RegisterBuiltinPolicies(policyEngine)
-	hub := engine.NewHub(policyEngine)
+	hub := engine.NewHub(policyEngine).WithRetention(retentionStore, retentionConfig)
 
 	ctx, cancel := context.WithCancel(context.Background())
 

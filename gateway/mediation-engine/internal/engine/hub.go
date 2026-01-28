@@ -4,8 +4,10 @@ import (
 	"context"
 	"log"
 	"sync"
+	"time"
 
 	"mediation-engine/pkg/core"
+	"mediation-engine/pkg/retention"
 )
 
 type Hub struct {
@@ -16,17 +18,36 @@ type Hub struct {
 	ingressChan chan core.Event
 	policy      core.RoutePolicyEngine
 
+	// Retention support
+	retention       core.RetentionStore
+	retentionConfig core.RetentionConfig
+	clientOnline    map[string]bool      // clientID -> connected?
+	clientLastSeen  map[string]time.Time // clientID -> last seen time
+
 	mu sync.RWMutex
 }
 
 func NewHub(policy core.RoutePolicyEngine) *Hub {
 	return &Hub{
-		entrypoints: make(map[string]core.Entrypoint),
-		endpoints:   make(map[string]core.Endpoint),
-		routes:      make(map[string]*core.Route),
-		ingressChan: make(chan core.Event, 1000),
-		policy:      policy,
+		entrypoints:    make(map[string]core.Entrypoint),
+		endpoints:      make(map[string]core.Endpoint),
+		routes:         make(map[string]*core.Route),
+		ingressChan:    make(chan core.Event, 1000),
+		policy:         policy,
+		clientOnline:   make(map[string]bool),
+		clientLastSeen: make(map[string]time.Time),
 	}
+}
+
+// WithRetention configures the hub with a retention store and global config
+func (h *Hub) WithRetention(store core.RetentionStore, config core.RetentionConfig) *Hub {
+	h.retention = store
+	h.retentionConfig = config
+	if store != nil {
+		log.Printf("[Engine] Retention enabled: mode=%s, ttl=%v, max=%d",
+			config.Mode, config.TTL, config.MaxPerClient)
+	}
+	return h
 }
 
 func (h *Hub) RegisterEntrypoint(e core.Entrypoint) { h.entrypoints[e.Name()] = e }
@@ -67,6 +88,26 @@ func (h *Hub) processEvent(ctx context.Context, evt core.Event) {
 
 // handleLifecycleEvent manages client connect/disconnect at endpoints
 func (h *Hub) handleLifecycleEvent(ctx context.Context, evt core.Event) {
+	// Update client online status for retention
+	h.mu.Lock()
+	switch evt.Type {
+	case core.EventTypeConnect:
+		h.clientOnline[evt.ClientID] = true
+		h.clientLastSeen[evt.ClientID] = time.Now()
+	case core.EventTypeDisconnect:
+		h.clientOnline[evt.ClientID] = false
+		h.clientLastSeen[evt.ClientID] = time.Now()
+	}
+	h.mu.Unlock()
+
+	// Replay retained events on client reconnect (from entrypoint)
+	if evt.Type == core.EventTypeConnect && h.retention != nil {
+		// Check if this connect is from an entrypoint (not endpoint)
+		if _, isEntrypoint := h.entrypoints[evt.SourceID]; isEntrypoint {
+			go h.replayRetainedEvents(ctx, evt.ClientID, evt.SourceID)
+		}
+	}
+
 	h.mu.RLock()
 	route, exists := h.routes[evt.SourceID]
 	h.mu.RUnlock()
@@ -103,6 +144,52 @@ func (h *Hub) handleLifecycleEvent(ctx context.Context, evt core.Event) {
 	}
 }
 
+// replayRetainedEvents sends stored events to a reconnected client
+func (h *Hub) replayRetainedEvents(ctx context.Context, clientID, entrypointName string) {
+	entrypoint, ok := h.entrypoints[entrypointName]
+	if !ok {
+		return
+	}
+
+	entries, err := h.retention.Retrieve(ctx, clientID)
+	if err != nil {
+		log.Printf("[Retention] Failed to retrieve events for client %s: %v", clientID, err)
+		return
+	}
+
+	if len(entries) == 0 {
+		return
+	}
+
+	log.Printf("[Retention] Replaying %d events for client %s via %s",
+		len(entries), clientID, entrypointName)
+
+	successCount := 0
+	for _, entry := range entries {
+		// Mark as replay in metadata
+		evt := entry.Event
+		if evt.Metadata == nil {
+			evt.Metadata = make(map[string]string)
+		}
+		evt.Metadata["replayed"] = "true"
+		evt.Metadata["original_timestamp"] = entry.Timestamp.Format(time.RFC3339)
+
+		if err := entrypoint.SendDownstream(ctx, evt); err != nil {
+			log.Printf("[Retention] Failed to replay event %s: %v", evt.ID, err)
+			continue
+		}
+
+		// Acknowledge successful delivery
+		if err := h.retention.Acknowledge(ctx, clientID, evt.ID); err != nil {
+			log.Printf("[Retention] Failed to acknowledge event %s: %v", evt.ID, err)
+		}
+		successCount++
+	}
+
+	log.Printf("[Retention] Replay complete for client %s: %d/%d events delivered",
+		clientID, successCount, len(entries))
+}
+
 // routeMessage handles regular message routing
 func (h *Hub) routeMessage(ctx context.Context, evt core.Event) {
 	h.mu.RLock()
@@ -136,9 +223,104 @@ func (h *Hub) routeMessage(ctx context.Context, evt core.Event) {
 	}
 
 	if entrypoint, ok := h.entrypoints[destName]; ok {
-		entrypoint.SendDownstream(ctx, evt)
+		// Handle retention for entrypoint destinations
+		h.deliverToEntrypoint(ctx, entrypoint, evt, route)
 		return
 	}
 
 	log.Printf("[Router] Destination %s not found", destName)
+}
+
+// deliverToEntrypoint handles delivery with retention support
+func (h *Hub) deliverToEntrypoint(ctx context.Context, entrypoint core.Entrypoint, evt core.Event, route *core.Route) {
+	// Check if retention is configured for this route
+	retentionConfig := h.getRouteRetentionConfig(route)
+
+	// No retention configured - deliver directly
+	if h.retention == nil || retentionConfig == nil {
+		if err := entrypoint.SendDownstream(ctx, evt); err != nil {
+			log.Printf("[Router] Delivery failed to %s: %v", entrypoint.Name(), err)
+		}
+		return
+	}
+
+	mode := retentionConfig.Mode
+	if mode == "" {
+		mode = h.retentionConfig.Mode
+	}
+
+	// Check client online status
+	h.mu.RLock()
+	isOnline := h.clientOnline[evt.ClientID]
+	h.mu.RUnlock()
+
+	switch mode {
+	case core.ModeDisconnected:
+		// Store only when client is offline
+		if !isOnline {
+			h.storeForRetention(ctx, evt, route.Source)
+			log.Printf("[Retention] Client %s offline, stored event %s for later delivery",
+				evt.ClientID, evt.ID)
+			return
+		}
+		// Client online - deliver directly
+		if err := entrypoint.SendDownstream(ctx, evt); err != nil {
+			log.Printf("[Router] Delivery failed to %s (client %s): %v",
+				entrypoint.Name(), evt.ClientID, err)
+			// On delivery failure, store for retry
+			h.storeForRetention(ctx, evt, route.Source)
+		}
+
+	case core.ModeAlways:
+		// Store before every delivery attempt
+		h.storeForRetention(ctx, evt, route.Source)
+
+		if err := entrypoint.SendDownstream(ctx, evt); err != nil {
+			log.Printf("[Router] Delivery failed to %s (client %s): %v",
+				entrypoint.Name(), evt.ClientID, err)
+			// Event remains in retention for retry
+			return
+		}
+
+		// Acknowledge on successful delivery
+		if err := h.retention.Acknowledge(ctx, evt.ClientID, evt.ID); err != nil {
+			log.Printf("[Retention] Failed to acknowledge event %s: %v", evt.ID, err)
+		}
+	}
+}
+
+// storeForRetention stores an event in the retention layer
+func (h *Hub) storeForRetention(ctx context.Context, evt core.Event, routeKey string) {
+	if h.retention == nil || evt.ClientID == "" {
+		return
+	}
+
+	entry := core.RetentionEntry{
+		Event:     evt,
+		Timestamp: time.Now(),
+		RouteKey:  routeKey,
+		Attempts:  0,
+	}
+
+	if err := h.retention.Store(ctx, evt.ClientID, entry); err != nil {
+		log.Printf("[Retention] Failed to store event %s: %v", evt.ID, err)
+	}
+}
+
+// getRouteRetentionConfig extracts retention config from route policies
+func (h *Hub) getRouteRetentionConfig(route *core.Route) *core.RetentionConfig {
+	for _, p := range route.Policies {
+		if p.Type == "retention" {
+			cfg := retention.ParseRetentionConfigFromPolicy(p.Config, h.retentionConfig)
+			return &cfg
+		}
+	}
+	return nil
+}
+
+// IsClientOnline returns whether a client is currently connected
+func (h *Hub) IsClientOnline(clientID string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.clientOnline[clientID]
 }
