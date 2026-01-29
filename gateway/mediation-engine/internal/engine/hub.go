@@ -77,7 +77,6 @@ func (h *Hub) Start(ctx context.Context) {
 }
 
 func (h *Hub) processEvent(ctx context.Context, evt core.Event) {
-	// Handle lifecycle events
 	if evt.IsLifecycle() {
 		h.handleLifecycleEvent(ctx, evt)
 		return

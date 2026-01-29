@@ -53,10 +53,6 @@ func New(name string, config map[string]string) *MockEndpoint {
 	}
 
 	prefix := config["push_prefix"]
-	if prefix == "" {
-		prefix = "mock-msg-"
-	}
-
 	broadcast := config["broadcast"] == "true"
 
 	return &MockEndpoint{
@@ -76,10 +72,7 @@ func (m *MockEndpoint) Type() string { return "mock" }
 
 func (m *MockEndpoint) Start(ctx context.Context, hub core.IngressHub) error {
 	m.hub = hub
-	log.Printf("[%s] Mock endpoint started (mode=%s, interval=%v, prefix=%s, broadcast=%v)",
-		m.name, m.mode, m.pushInterval, m.pushPrefix, m.broadcast)
 
-	// Start broadcast loop if enabled and mode includes push
 	if m.broadcast && (m.mode == "push" || m.mode == "both") {
 		m.broadcastCtx, m.broadcastCancel = context.WithCancel(ctx)
 		go m.broadcastLoop(m.broadcastCtx)
@@ -93,18 +86,14 @@ func (m *MockEndpoint) Start(ctx context.Context, hub core.IngressHub) error {
 	return nil
 }
 
-// broadcastLoop continuously pushes messages to all registered clients
-// Messages are sent regardless of client connectivity - the hub/retention handles offline clients
+// Broadcast messages are sent regardless of client connectivity - the hub/retention handles offline clients
 func (m *MockEndpoint) broadcastLoop(ctx context.Context) {
 	ticker := time.NewTicker(m.pushInterval)
 	defer ticker.Stop()
 
-	log.Printf("[%s] Broadcast loop started", m.name)
-
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("[%s] Broadcast loop stopped", m.name)
 			return
 		case <-ticker.C:
 			m.counterMu.Lock()
@@ -125,7 +114,6 @@ func (m *MockEndpoint) broadcastLoop(ctx context.Context) {
 				continue
 			}
 
-			// Push to each registered client
 			payload := fmt.Sprintf("%s%d", m.pushPrefix, count)
 			for _, clientID := range clientIDs {
 				evt := core.Event{
@@ -151,7 +139,6 @@ func (m *MockEndpoint) SubscribeForClient(ctx context.Context, clientID string, 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Cancel existing subscription if any
 	if cancel, exists := m.clients[clientID]; exists {
 		cancel()
 	}
@@ -159,7 +146,6 @@ func (m *MockEndpoint) SubscribeForClient(ctx context.Context, clientID string, 
 	clientCtx, cancel := context.WithCancel(ctx)
 	m.clients[clientID] = cancel
 
-	// Start per-client push goroutine only if NOT in broadcast mode and mode is push/both
 	if !m.broadcast && (m.mode == "push" || m.mode == "both") {
 		go m.pushLoop(clientCtx, clientID)
 	}
@@ -203,8 +189,7 @@ func (m *MockEndpoint) pushLoop(ctx context.Context, clientID string) {
 	}
 }
 
-// UnsubscribeClient stops pushing messages to the client
-// In broadcast mode, this removes the client from the broadcast list
+// UnsubscribeClient stops pushing messages to the client (Not in broadcast mode)
 func (m *MockEndpoint) UnsubscribeClient(ctx context.Context, clientID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -223,7 +208,6 @@ func (m *MockEndpoint) UnsubscribeClient(ctx context.Context, clientID string) e
 func (m *MockEndpoint) SendUpstream(ctx context.Context, evt core.Event) error {
 	log.Printf("[%s] Received from client %s: %s", m.name, evt.ClientID, string(evt.Payload))
 
-	// Echo back if mode is "echo" or "both"
 	if m.mode == "echo" || m.mode == "both" {
 		echoEvt := core.Event{
 			ID:       fmt.Sprintf("%s-echo-%s", m.name, evt.ID),
