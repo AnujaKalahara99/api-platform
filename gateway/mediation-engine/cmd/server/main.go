@@ -13,6 +13,7 @@ import (
 	"mediation-engine/pkg/config"
 	"mediation-engine/pkg/core"
 	"mediation-engine/pkg/plugins/kafka"
+	"mediation-engine/pkg/plugins/mock"
 	"mediation-engine/pkg/plugins/mqtt"
 	"mediation-engine/pkg/plugins/sse"
 	"mediation-engine/pkg/plugins/ws"
@@ -99,6 +100,10 @@ func main() {
 			go plugin.Start(ctx, hub)
 		case "mqtt":
 			plugin := mqtt.New(e.Name, e.Config["broker"], e.Config["topic_in"], e.Config["topic_out"])
+			hub.RegisterEndpoint(plugin)
+			go plugin.Start(ctx, hub)
+		case "mock":
+			plugin := mock.New(e.Name, e.Config)
 			hub.RegisterEndpoint(plugin)
 			go plugin.Start(ctx, hub)
 		}

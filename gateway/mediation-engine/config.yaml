@@ -1,17 +1,15 @@
 version: v1
 
 # Global retention settings
-# Events are stored when clients are disconnected and replayed on reconnect
 retention:
   enabled: true
-  mode: "disconnected"       # "disconnected" (default) or "always"
-  store: "memory"            # "memory" or "redis"
+  mode: "disconnected"       # "disconnected" (default) | "always"
+  store: "memory"            # "memory" | "redis"
   redis_addr: "localhost:6379"  # Required if store=redis
   ttl: "1h"                  # How long to retain events
   max_per_client: 1000       # Max events per client (FIFO eviction)
   client_expiry: "24h"       # Clear buffer if client never returns
 
-# 1. Define How Data Enters (Ingress)
 entrypoints:
   - name: "ws-users"
     type: "websocket"
@@ -21,7 +19,6 @@ entrypoints:
     type: "sse"
     port: ":8108"
 
-# 2. Define Where Data Goes (Egress)
 endpoints:
   # - name: "kafka-backend"
   #   type: "kafka"
@@ -37,28 +34,32 @@ endpoints:
       topic_in: "test/pub"
       topic_out: "test/sub"
 
-# 3. The Logic (Mediation & Flow)
-# This maps sources to destinations. 
-# Routes can have retention policies for delivery guarantees.
-routes:
-  - source: "mqtt-iot"
-    destination: "sse-feed"
-    policies:
-      - name: "content-filter"
-        type: "filter"
-        config:
-          block_pattern: "restricted"
+  - name: mock-push 
+    type: mock
+    config:
+      mode: "push"            # "push" | "echo" | "both"
+      broadcast: "true"       # If push mode, send to all connected clients
+      push_interval: "2s"
+      push_prefix: "counter-"
 
-  - source: "mqtt-iot"
+routes:
+  # - source: "mqtt-iot"
+  #   destination: "sse-feed"
+  #   policies:
+  #     - name: "content-filter"
+  #       type: "filter"
+  #       config:
+  #         block_pattern: "restricted"
+
+  - source: "mock-push"
     destination: "ws-users"
     policies:
-      # Route-level retention policy (overrides global settings)
       - name: "ws-retention"
-        type: "retention"
+        type: "retention"        # Overrides global settings
         config:
           mode: "disconnected"   # Store only when client is offline
           ttl: "30m"             # Override global TTL
           max_per_client: "500"  # Override global max
 
   - source: "ws-users"
-    destination: "mqtt-iot"
+    destination: "mock-push"

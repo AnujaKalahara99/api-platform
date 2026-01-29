@@ -21,9 +21,10 @@ type EntrypointConfig struct {
 	Port string `yaml:"port"`
 }
 
+// EndpointConfig represents an endpoint configuration
 type EndpointConfig struct {
-	Type   string            `yaml:"type"`
 	Name   string            `yaml:"name"`
+	Type   string            `yaml:"type"` // "kafka", "mqtt", "mock"
 	Config map[string]string `yaml:"config"`
 }
 
