@@ -74,7 +74,9 @@ func main() {
 
 	policyEngine := policy.NewEngine()
 	policy.RegisterBuiltinPolicies(policyEngine)
-	hub := engine.NewHub(policyEngine).WithRetention(retentionStore, retentionConfig)
+	hub := engine.NewHub(policyEngine).
+		WithSessionStore(sessionStore). // Add this line
+		WithRetention(retentionStore, retentionConfig)
 
 	ctx, cancel := context.WithCancel(context.Background())
 

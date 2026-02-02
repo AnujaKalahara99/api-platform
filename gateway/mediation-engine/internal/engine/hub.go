@@ -21,22 +21,32 @@ type Hub struct {
 	// Retention support
 	retention       core.RetentionStore
 	retentionConfig core.RetentionConfig
-	clientOnline    map[string]bool      // clientID -> connected?
-	clientLastSeen  map[string]time.Time // clientID -> last seen time
+
+	// Session store for persistent client state
+	sessions core.SessionStore
+
+	// In-memory cache (optional fast-path, synced with session store)
+	clientCache   map[string]bool
+	clientCacheMu sync.RWMutex
 
 	mu sync.RWMutex
 }
 
 func NewHub(policy core.RoutePolicyEngine) *Hub {
 	return &Hub{
-		entrypoints:    make(map[string]core.Entrypoint),
-		endpoints:      make(map[string]core.Endpoint),
-		routes:         make(map[string]*core.Route),
-		ingressChan:    make(chan core.Event, 1000),
-		policy:         policy,
-		clientOnline:   make(map[string]bool),
-		clientLastSeen: make(map[string]time.Time),
+		entrypoints: make(map[string]core.Entrypoint),
+		endpoints:   make(map[string]core.Endpoint),
+		routes:      make(map[string]*core.Route),
+		ingressChan: make(chan core.Event, 1000),
+		policy:      policy,
+		clientCache: make(map[string]bool),
 	}
+}
+
+// WithSessionStore configures the hub with a session store for persistent client tracking
+func (h *Hub) WithSessionStore(store core.SessionStore) *Hub {
+	h.sessions = store
+	return h
 }
 
 // WithRetention configures the hub with a retention store and global config
@@ -87,17 +97,13 @@ func (h *Hub) processEvent(ctx context.Context, evt core.Event) {
 
 // handleLifecycleEvent manages client connect/disconnect at endpoints
 func (h *Hub) handleLifecycleEvent(ctx context.Context, evt core.Event) {
-	// Update client online status for retention
-	h.mu.Lock()
+	// Update client state in session store (persistent) and cache (fast-path)
 	switch evt.Type {
 	case core.EventTypeConnect:
-		h.clientOnline[evt.ClientID] = true
-		h.clientLastSeen[evt.ClientID] = time.Now()
+		h.setClientOnline(ctx, evt.ClientID, true)
 	case core.EventTypeDisconnect:
-		h.clientOnline[evt.ClientID] = false
-		h.clientLastSeen[evt.ClientID] = time.Now()
+		h.setClientOnline(ctx, evt.ClientID, false)
 	}
-	h.mu.Unlock()
 
 	// Replay retained events on client reconnect (from entrypoint)
 	if evt.Type == core.EventTypeConnect && h.retention != nil {
@@ -141,6 +147,78 @@ func (h *Hub) handleLifecycleEvent(ctx context.Context, evt core.Event) {
 				evt.ClientID, destName, err)
 		}
 	}
+}
+
+// setClientOnline updates client connectivity in both cache and persistent store
+func (h *Hub) setClientOnline(ctx context.Context, clientID string, online bool) {
+	// Update in-memory cache for fast lookups
+	h.clientCacheMu.Lock()
+	h.clientCache[clientID] = online
+	h.clientCacheMu.Unlock()
+
+	// Persist to session store if available
+	if h.sessions != nil {
+		state := core.SessionStateDisconnected
+		if online {
+			state = core.SessionStateConnected
+		}
+		if err := h.sessions.UpdateState(ctx, clientID, state); err != nil {
+			// Session might not exist yet (first connect handled by entrypoint)
+			log.Printf("[Hub] Session state update for %s: %v", clientID, err)
+		}
+	}
+}
+
+// IsClientOnline checks if a client is currently connected
+// Uses cache first, falls back to session store
+func (h *Hub) IsClientOnline(clientID string) bool {
+	// Fast path: check in-memory cache
+	h.clientCacheMu.RLock()
+	online, cached := h.clientCache[clientID]
+	h.clientCacheMu.RUnlock()
+
+	if cached {
+		return online
+	}
+
+	// Slow path: check session store
+	if h.sessions != nil {
+		session, err := h.sessions.Get(context.Background(), clientID)
+		if err == nil {
+			isOnline := session.State == core.SessionStateConnected
+			// Populate cache
+			h.clientCacheMu.Lock()
+			h.clientCache[clientID] = isOnline
+			h.clientCacheMu.Unlock()
+			return isOnline
+		}
+	}
+
+	return false
+}
+
+// LoadClientStatesFromStore rebuilds in-memory cache from persistent store on startup
+// Call this during hub initialization if recovering from restart
+func (h *Hub) LoadClientStatesFromStore(ctx context.Context, clientIDs []string) error {
+	if h.sessions == nil {
+		return nil
+	}
+
+	h.clientCacheMu.Lock()
+	defer h.clientCacheMu.Unlock()
+
+	loaded := 0
+	for _, clientID := range clientIDs {
+		session, err := h.sessions.Get(ctx, clientID)
+		if err != nil {
+			continue
+		}
+		h.clientCache[clientID] = (session.State == core.SessionStateConnected)
+		loaded++
+	}
+
+	log.Printf("[Hub] Loaded %d client states from session store", loaded)
+	return nil
 }
 
 // replayRetainedEvents sends stored events to a reconnected client
@@ -248,10 +326,8 @@ func (h *Hub) deliverToEntrypoint(ctx context.Context, entrypoint core.Entrypoin
 		mode = h.retentionConfig.Mode
 	}
 
-	// Check client online status
-	h.mu.RLock()
-	isOnline := h.clientOnline[evt.ClientID]
-	h.mu.RUnlock()
+	// Check client online status using session-backed method
+	isOnline := h.IsClientOnline(evt.ClientID)
 
 	switch mode {
 	case core.ModeDisconnected:
@@ -315,11 +391,4 @@ func (h *Hub) getRouteRetentionConfig(route *core.Route) *core.RetentionConfig {
 		}
 	}
 	return nil
-}
-
-// IsClientOnline returns whether a client is currently connected
-func (h *Hub) IsClientOnline(clientID string) bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return h.clientOnline[clientID]
 }
