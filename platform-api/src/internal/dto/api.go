@@ -23,29 +23,24 @@ import (
 
 // API represents an API entity in the platform
 type API struct {
-	ID               string              `json:"id,omitempty" yaml:"id,omitempty"`
-	Name             string              `json:"name" yaml:"name"`
-	Description      string              `json:"description,omitempty" yaml:"description,omitempty"`
-	Context          string              `json:"context" yaml:"context"`
-	Version          string              `json:"version" yaml:"version"`
-	Provider         string              `json:"provider,omitempty" yaml:"provider,omitempty"`
-	ProjectID        string              `json:"projectId" yaml:"projectId"`
-	OrganizationID   string              `json:"organizationId" yaml:"organizationId"`
-	CreatedAt        time.Time           `json:"createdAt,omitempty" yaml:"createdAt,omitempty"`
-	UpdatedAt        time.Time           `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
-	LifeCycleStatus  string              `json:"lifeCycleStatus,omitempty" yaml:"lifeCycleStatus,omitempty"`
-	HasThumbnail     bool                `json:"hasThumbnail,omitempty" yaml:"hasThumbnail,omitempty"`
-	IsDefaultVersion bool                `json:"isDefaultVersion,omitempty" yaml:"isDefaultVersion,omitempty"`
-	Type             string              `json:"type,omitempty" yaml:"type,omitempty"`
-	Transport        []string            `json:"transport,omitempty" yaml:"transport,omitempty"`
-	MTLS             *MTLSConfig         `json:"mtls,omitempty" yaml:"mtls,omitempty"`
-	Security         *SecurityConfig     `json:"security,omitempty" yaml:"security,omitempty"`
-	CORS             *CORSConfig         `json:"cors,omitempty" yaml:"cors,omitempty"`
-	BackendServices  []BackendService    `json:"backend-services,omitempty" yaml:"backend-services,omitempty"`
-	APIRateLimiting  *RateLimitingConfig `json:"api-rate-limiting,omitempty" yaml:"api-rate-limiting,omitempty"`
-	Policies         []Policy            `json:"policies,omitempty" yaml:"policies,omitempty"`
-	Operations       []Operation         `json:"operations,omitempty" yaml:"operations,omitempty"`
-	Channels         []Channel           `json:"channels,omitempty" yaml:"channels,omitempty"`
+	ID               string           `json:"id,omitempty" yaml:"id,omitempty"`
+	Name             string           `json:"name" yaml:"name"`
+	Description      string           `json:"description,omitempty" yaml:"description,omitempty"`
+	Context          string           `json:"context" yaml:"context"`
+	Version          string           `json:"version" yaml:"version"`
+	Provider         string           `json:"provider,omitempty" yaml:"provider,omitempty"`
+	ProjectID        string           `json:"projectId" yaml:"projectId"`
+	OrganizationID   string           `json:"organizationId" yaml:"organizationId"`
+	CreatedAt        time.Time        `json:"createdAt,omitempty" yaml:"createdAt,omitempty"`
+	UpdatedAt        time.Time        `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
+	LifeCycleStatus  string           `json:"lifeCycleStatus,omitempty" yaml:"lifeCycleStatus,omitempty"`
+	Type             string           `json:"type,omitempty" yaml:"type,omitempty"`
+	Transport        []string         `json:"transport,omitempty" yaml:"transport,omitempty"`
+	MTLS             *MTLSConfig      `json:"mtls,omitempty" yaml:"mtls,omitempty"`
+	BackendServices  []BackendService `json:"backend-services,omitempty" yaml:"backend-services,omitempty"`
+	Policies         []Policy         `json:"policies,omitempty" yaml:"policies,omitempty"`
+	Operations       []Operation      `json:"operations,omitempty" yaml:"operations,omitempty"`
+	Channels         []Channel        `json:"channels,omitempty" yaml:"channels,omitempty"`
 }
 
 // MTLSConfig represents mutual TLS configuration
@@ -61,8 +56,6 @@ type MTLSConfig struct {
 // SecurityConfig represents security configuration
 type SecurityConfig struct {
 	Enabled       bool                   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	APIKey        *APIKeySecurity        `json:"apiKey,omitempty" yaml:"apiKey,omitempty"`
-	OAuth2        *OAuth2Security        `json:"oauth2,omitempty" yaml:"oauth2,omitempty"`
 	XHubSignature *XHubSignatureSecurity `json:"xHubSignature,omitempty" yaml:"xHubSignature,omitempty"`
 }
 
@@ -72,69 +65,6 @@ type XHubSignatureSecurity struct {
 	Header    string `json:"header,omitempty" yaml:"header,omitempty"`
 	Secret    string `json:"secret,omitempty" yaml:"secret,omitempty"`
 	Algorithm string `json:"algorithm,omitempty" yaml:"algorithm,omitempty"`
-}
-
-// APIKeySecurity represents API key security configuration
-type APIKeySecurity struct {
-	Enabled bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	Header  string `json:"header,omitempty" yaml:"header,omitempty"`
-	Query   string `json:"query,omitempty" yaml:"query,omitempty"`
-	Cookie  string `json:"cookie,omitempty" yaml:"cookie,omitempty"`
-}
-
-// OAuth2Security represents OAuth2 security configuration
-type OAuth2Security struct {
-	GrantTypes *OAuth2GrantTypes `json:"grantTypes,omitempty" yaml:"grantTypes,omitempty"`
-	Scopes     []string          `json:"scopes,omitempty" yaml:"scopes,omitempty"`
-}
-
-// OAuth2GrantTypes represents OAuth2 grant types configuration
-type OAuth2GrantTypes struct {
-	AuthorizationCode *AuthorizationCodeGrant `json:"authorizationCode,omitempty" yaml:"authorizationCode,omitempty"`
-	Implicit          *ImplicitGrant          `json:"implicit,omitempty" yaml:"implicit,omitempty"`
-	Password          *PasswordGrant          `json:"password,omitempty" yaml:"password,omitempty"`
-	ClientCredentials *ClientCredentialsGrant `json:"clientCredentials,omitempty" yaml:"clientCredentials,omitempty"`
-}
-
-// AuthorizationCodeGrant represents authorization code grant configuration
-type AuthorizationCodeGrant struct {
-	Enabled     bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	CallbackURL string `json:"callbackUrl,omitempty" yaml:"callbackUrl,omitempty"`
-}
-
-// ImplicitGrant represents implicit grant configuration
-type ImplicitGrant struct {
-	Enabled     bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	CallbackURL string `json:"callbackUrl,omitempty" yaml:"callbackUrl,omitempty"`
-}
-
-// PasswordGrant represents password grant configuration
-type PasswordGrant struct {
-	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-}
-
-// ClientCredentialsGrant represents client credentials grant configuration
-type ClientCredentialsGrant struct {
-	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-}
-
-// CORSConfig represents CORS configuration
-type CORSConfig struct {
-	Enabled          bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	AllowOrigins     string `json:"allowOrigins,omitempty" yaml:"allowOrigins,omitempty"`
-	AllowMethods     string `json:"allowMethods,omitempty" yaml:"allowMethods,omitempty"`
-	AllowHeaders     string `json:"allowHeaders,omitempty" yaml:"allowHeaders,omitempty"`
-	ExposeHeaders    string `json:"exposeHeaders,omitempty" yaml:"exposeHeaders,omitempty"`
-	MaxAge           int    `json:"maxAge,omitempty" yaml:"maxAge,omitempty"`
-	AllowCredentials bool   `json:"allowCredentials,omitempty" yaml:"allowCredentials,omitempty"`
-}
-
-// RateLimitingConfig represents rate limiting configuration
-type RateLimitingConfig struct {
-	Enabled           bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	RateLimitCount    int    `json:"rateLimitCount,omitempty" yaml:"rateLimitCount,omitempty"`
-	RateLimitTimeUnit string `json:"rateLimitTimeUnit,omitempty" yaml:"rateLimitTimeUnit,omitempty"`
-	StopOnQuotaReach  bool   `json:"stopOnQuotaReach,omitempty" yaml:"stopOnQuotaReach,omitempty"`
 }
 
 // Operation represents an API operation
@@ -191,9 +121,9 @@ type Policy struct {
 
 // DeployAPIRequest represents a request to deploy an API
 type DeployAPIRequest struct {
-	Name      string                 `json:"name" yaml:"name"`                              // Deployment name
-	Base      string                 `json:"base" yaml:"base"`                              // "current" or a deploymentId
-	GatewayID string                 `json:"gatewayId" yaml:"gatewayId"`                    // Target gateway ID
+	Name      string                 `json:"name" yaml:"name"`                             // Deployment name
+	Base      string                 `json:"base" yaml:"base"`                             // "current" or a deploymentId
+	GatewayID string                 `json:"gatewayId" yaml:"gatewayId"`                   // Target gateway ID
 	Metadata  map[string]interface{} `json:"metadata,omitempty" yaml:"metadata,omitempty"` // Flexible key-value metadata
 }
 

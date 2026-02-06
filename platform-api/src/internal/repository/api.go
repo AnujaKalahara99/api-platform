@@ -68,16 +68,14 @@ func (r *APIRepo) CreateAPI(api *model.API) error {
 	// Insert main API record
 	apiQuery := `
 		INSERT INTO apis (uuid, handle, name, description, context, version, provider,
-			project_uuid, organization_uuid, lifecycle_status, has_thumbnail, is_default_version,
-			type, transport, policies, security_enabled, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			project_uuid, organization_uuid, lifecycle_status,
+			type, transport, policies, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-
-	securityEnabled := api.Security != nil && api.Security.Enabled
 
 	_, err = tx.Exec(r.db.Rebind(apiQuery), api.ID, api.Handle, api.Name, api.Description,
 		api.Context, api.Version, api.Provider, api.ProjectID, api.OrganizationID, api.LifeCycleStatus,
-		api.HasThumbnail, api.IsDefaultVersion, api.Type, string(transportJSON), policiesJSON, securityEnabled, api.CreatedAt, api.UpdatedAt)
+		api.Type, string(transportJSON), policiesJSON, api.CreatedAt, api.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -85,27 +83,6 @@ func (r *APIRepo) CreateAPI(api *model.API) error {
 	// Insert MTLS configuration
 	if api.MTLS != nil {
 		if err := r.insertMTLSConfig(tx, api.ID, api.MTLS); err != nil {
-			return err
-		}
-	}
-
-	// Insert Security configuration
-	if api.Security != nil {
-		if err := r.insertSecurityConfig(tx, api.ID, api.Security); err != nil {
-			return err
-		}
-	}
-
-	// Insert CORS configuration
-	if api.CORS != nil {
-		if err := r.insertCORSConfig(tx, api.ID, api.CORS); err != nil {
-			return err
-		}
-	}
-
-	// Insert Rate Limiting configuration
-	if api.APIRateLimiting != nil {
-		if err := r.insertRateLimitingConfig(tx, api.ID, api.APIRateLimiting); err != nil {
 			return err
 		}
 	}
@@ -133,19 +110,18 @@ func (r *APIRepo) GetAPIByUUID(apiUUID, orgUUID string) (*model.API, error) {
 
 	query := `
 		SELECT uuid, handle, name, description, context, version, provider,
-			project_uuid, organization_uuid, lifecycle_status, has_thumbnail, is_default_version,
-			type, transport, policies, security_enabled, created_at, updated_at
+			project_uuid, organization_uuid, lifecycle_status,
+			type, transport, policies, created_at, updated_at
 		FROM apis WHERE uuid = ? and organization_uuid = ?
 	`
 
 	var transportJSON string
 	var policiesJSON sql.NullString
-	var securityEnabled bool
 	err := r.db.QueryRow(r.db.Rebind(query), apiUUID, orgUUID).Scan(
 		&api.ID, &api.Handle, &api.Name, &api.Description, &api.Context,
 		&api.Version, &api.Provider, &api.ProjectID, &api.OrganizationID, &api.LifeCycleStatus,
-		&api.HasThumbnail, &api.IsDefaultVersion, &api.Type, &transportJSON, &policiesJSON,
-		&securityEnabled, &api.CreatedAt, &api.UpdatedAt)
+		&api.Type, &transportJSON, &policiesJSON,
+		&api.CreatedAt, &api.UpdatedAt)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -195,8 +171,8 @@ func (r *APIRepo) GetAPIMetadataByHandle(handle, orgUUID string) (*model.APIMeta
 func (r *APIRepo) GetAPIsByProjectUUID(projectUUID, orgUUID string) ([]*model.API, error) {
 	query := `
 		SELECT uuid, handle, name, description, context, version, provider,
-			project_uuid, organization_uuid, lifecycle_status, has_thumbnail, is_default_version,
-			type, transport, policies, security_enabled, created_at, updated_at
+			project_uuid, organization_uuid, lifecycle_status,
+			type, transport, policies, created_at, updated_at
 		FROM apis WHERE project_uuid = ? AND organization_uuid = ? ORDER BY created_at DESC
 	`
 
@@ -211,12 +187,10 @@ func (r *APIRepo) GetAPIsByProjectUUID(projectUUID, orgUUID string) ([]*model.AP
 		api := &model.API{}
 		var transportJSON string
 		var policiesJSON sql.NullString
-		var securityEnabled bool
-
 		err := rows.Scan(&api.ID, &api.Handle, &api.Name, &api.Description,
 			&api.Context, &api.Version, &api.Provider, &api.ProjectID, &api.OrganizationID,
-			&api.LifeCycleStatus, &api.HasThumbnail, &api.IsDefaultVersion,
-			&api.Type, &transportJSON, &policiesJSON, &securityEnabled, &api.CreatedAt, &api.UpdatedAt)
+			&api.LifeCycleStatus,
+			&api.Type, &transportJSON, &policiesJSON, &api.CreatedAt, &api.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -251,8 +225,8 @@ func (r *APIRepo) GetAPIsByOrganizationUUID(orgUUID string, projectUUID *string)
 		// Filter by specific project within the organization
 		query = `
 			SELECT uuid, handle, name, description, context, version, provider,
-				project_uuid, organization_uuid, lifecycle_status, has_thumbnail, is_default_version,
-				type, transport, policies, security_enabled, created_at, updated_at
+				project_uuid, organization_uuid, lifecycle_status,
+				type, transport, policies, created_at, updated_at
 			FROM apis
 			WHERE organization_uuid = ? AND project_uuid = ?
 			ORDER BY created_at DESC
@@ -262,8 +236,8 @@ func (r *APIRepo) GetAPIsByOrganizationUUID(orgUUID string, projectUUID *string)
 		// Get all APIs for the organization
 		query = `
 			SELECT uuid, handle, name, description, context, version, provider,
-				project_uuid, organization_uuid, lifecycle_status, has_thumbnail, is_default_version,
-				type, transport, policies, security_enabled, created_at, updated_at
+				project_uuid, organization_uuid, lifecycle_status,
+				type, transport, policies, created_at, updated_at
 			FROM apis
 			WHERE organization_uuid = ?
 			ORDER BY created_at DESC
@@ -282,12 +256,10 @@ func (r *APIRepo) GetAPIsByOrganizationUUID(orgUUID string, projectUUID *string)
 		api := &model.API{}
 		var transportJSON string
 		var policiesJSON sql.NullString
-		var securityEnabled bool
-
 		err := rows.Scan(&api.ID, &api.Handle, &api.Name, &api.Description,
 			&api.Context, &api.Version, &api.Provider, &api.ProjectID, &api.OrganizationID,
-			&api.LifeCycleStatus, &api.HasThumbnail, &api.IsDefaultVersion,
-			&api.Type, &transportJSON, &policiesJSON, &securityEnabled, &api.CreatedAt, &api.UpdatedAt)
+			&api.LifeCycleStatus,
+			&api.Type, &transportJSON, &policiesJSON, &api.CreatedAt, &api.UpdatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -393,19 +365,17 @@ func (r *APIRepo) UpdateAPI(api *model.API) error {
 	if err != nil {
 		return err
 	}
-	securityEnabled := api.Security != nil && api.Security.Enabled
-
 	// Update main API record
 	query := `
 		UPDATE apis SET description = ?,
-			provider = ?, lifecycle_status = ?, has_thumbnail = ?,
-			is_default_version = ?, type = ?, transport = ?, policies = ?, security_enabled = ?, updated_at = ?
+			provider = ?, lifecycle_status = ?,
+			type = ?, transport = ?, policies = ?, updated_at = ?
 		WHERE uuid = ?
 	`
 	_, err = tx.Exec(r.db.Rebind(query), api.Description,
 		api.Provider, api.LifeCycleStatus,
-		api.HasThumbnail, api.IsDefaultVersion, api.Type, string(transportJSON), policiesJSON,
-		securityEnabled, api.UpdatedAt, api.ID)
+		api.Type, string(transportJSON), policiesJSON,
+		api.UpdatedAt, api.ID)
 	if err != nil {
 		return err
 	}
@@ -418,24 +388,6 @@ func (r *APIRepo) UpdateAPI(api *model.API) error {
 	// Re-insert configurations
 	if api.MTLS != nil {
 		if err := r.insertMTLSConfig(tx, api.ID, api.MTLS); err != nil {
-			return err
-		}
-	}
-
-	if api.Security != nil {
-		if err := r.insertSecurityConfig(tx, api.ID, api.Security); err != nil {
-			return err
-		}
-	}
-
-	if api.CORS != nil {
-		if err := r.insertCORSConfig(tx, api.ID, api.CORS); err != nil {
-			return err
-		}
-	}
-
-	if api.APIRateLimiting != nil {
-		if err := r.insertRateLimitingConfig(tx, api.ID, api.APIRateLimiting); err != nil {
 			return err
 		}
 	}
@@ -522,20 +474,6 @@ func (r *APIRepo) loadAPIConfigurations(api *model.API) error {
 		api.MTLS = mtls
 	}
 
-	// Load Security configuration
-	if security, err := r.loadSecurityConfig(api.ID); err != nil {
-		return err
-	} else if security != nil {
-		api.Security = security
-	}
-
-	// Load CORS configuration
-	if cors, err := r.loadCORSConfig(api.ID); err != nil {
-		return err
-	} else if cors != nil {
-		api.CORS = cors
-	}
-
 	// Load Backend Services associated with this API
 	if backendServices, err := r.backendServiceRepo.GetBackendServicesByAPIID(api.ID); err != nil {
 		return err
@@ -545,13 +483,6 @@ func (r *APIRepo) loadAPIConfigurations(api *model.API) error {
 		for i, bs := range backendServices {
 			api.BackendServices[i] = *bs
 		}
-	}
-
-	// Load Rate Limiting configuration
-	if rateLimiting, err := r.loadRateLimitingConfig(api.ID); err != nil {
-		return err
-	} else if rateLimiting != nil {
-		api.APIRateLimiting = rateLimiting
 	}
 
 	// Load Operations
@@ -600,222 +531,6 @@ func (r *APIRepo) loadMTLSConfig(apiId string) (*model.MTLSConfig, error) {
 		return nil, err
 	}
 	return mtls, nil
-}
-
-// Helper methods for Security configuration
-func (r *APIRepo) insertSecurityConfig(tx *sql.Tx, apiId string, security *model.SecurityConfig) error {
-	// Insert API Key security if present
-	if security.APIKey != nil {
-		apiKeyQuery := `
-			INSERT INTO api_key_security (api_uuid, enabled, header, query, cookie)
-			VALUES (?, ?, ?, ?, ?)
-		`
-		_, err := tx.Exec(r.db.Rebind(apiKeyQuery), apiId, security.APIKey.Enabled,
-			security.APIKey.Header, security.APIKey.Query, security.APIKey.Cookie)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Insert OAuth2 security if present
-	if security.OAuth2 != nil {
-		scopesJSON, _ := json.Marshal(security.OAuth2.Scopes)
-
-		var authCodeEnabled bool
-		var authCodeCallback string
-		var implicitEnabled bool
-		var implicitCallback string
-		var passwordEnabled bool
-		var clientCredEnabled bool
-
-		if security.OAuth2.GrantTypes != nil {
-			if security.OAuth2.GrantTypes.AuthorizationCode != nil {
-				authCodeEnabled = security.OAuth2.GrantTypes.AuthorizationCode.Enabled
-				authCodeCallback = security.OAuth2.GrantTypes.AuthorizationCode.CallbackURL
-			}
-			if security.OAuth2.GrantTypes.Implicit != nil {
-				implicitEnabled = security.OAuth2.GrantTypes.Implicit.Enabled
-				implicitCallback = security.OAuth2.GrantTypes.Implicit.CallbackURL
-			}
-			if security.OAuth2.GrantTypes.Password != nil {
-				passwordEnabled = security.OAuth2.GrantTypes.Password.Enabled
-			}
-			if security.OAuth2.GrantTypes.ClientCredentials != nil {
-				clientCredEnabled = security.OAuth2.GrantTypes.ClientCredentials.Enabled
-			}
-		}
-
-		oauth2Query := `
-			INSERT INTO oauth2_security (api_uuid, enabled, authorization_code_enabled,
-				authorization_code_callback_url, implicit_enabled, implicit_callback_url,
-				password_enabled, client_credentials_enabled, scopes)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`
-		_, err := tx.Exec(r.db.Rebind(oauth2Query), apiId, true, authCodeEnabled, authCodeCallback,
-			implicitEnabled, implicitCallback, passwordEnabled, clientCredEnabled, string(scopesJSON))
-		if err != nil {
-			return err
-		}
-	}
-
-	if security.XHubSignature != nil {
-		xHubQuery := `
-				INSERT INTO xhub_signature_security (api_uuid, enabled, secret, algorithm, header)
-				VALUES (?, ?, ?, ?, ?)
-			`
-		_, err := tx.Exec(r.db.Rebind(xHubQuery), apiId, security.XHubSignature.Enabled,
-			security.XHubSignature.Secret, security.XHubSignature.Algorithm, security.XHubSignature.Header)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *APIRepo) loadSecurityConfig(apiId string) (*model.SecurityConfig, error) {
-	security := &model.SecurityConfig{Enabled: true}
-
-	// Load API Key security
-	apiKey := &model.APIKeySecurity{}
-	apiKeyQuery := `
-		SELECT enabled, header, query, cookie 
-		FROM api_key_security WHERE api_uuid = ?
-	`
-	err := r.db.QueryRow(r.db.Rebind(apiKeyQuery), apiId).Scan(&apiKey.Enabled,
-		&apiKey.Header, &apiKey.Query, &apiKey.Cookie)
-	if err == nil {
-		security.APIKey = apiKey
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-
-	// Load XHub Signature security if present
-	xHub := &model.XHubSignatureSecurity{}
-	xHubQuery := `
-			SELECT enabled, secret, algorithm, header
-			FROM xhub_signature_security WHERE api_uuid = ?
-		`
-	err = r.db.QueryRow(r.db.Rebind(xHubQuery), apiId).Scan(&xHub.Enabled,
-		&xHub.Secret, &xHub.Algorithm, &xHub.Header)
-	if err == nil {
-		security.XHubSignature = xHub
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-
-	// Load OAuth2 security
-	oauth2 := &model.OAuth2Security{}
-	var scopesJSON string
-	var authCodeEnabled, implicitEnabled, passwordEnabled, clientCredEnabled bool
-	var authCodeCallback, implicitCallback string
-
-	oauth2Query := `
-		SELECT enabled, authorization_code_enabled, authorization_code_callback_url,
-			implicit_enabled, implicit_callback_url, password_enabled, client_credentials_enabled, scopes
-		FROM oauth2_security WHERE api_uuid = ?
-	`
-	var enabled bool
-	err = r.db.QueryRow(r.db.Rebind(oauth2Query), apiId).Scan(&enabled, &authCodeEnabled, &authCodeCallback,
-		&implicitEnabled, &implicitCallback, &passwordEnabled, &clientCredEnabled, &scopesJSON)
-	if err == nil {
-		if scopesJSON != "" {
-			json.Unmarshal([]byte(scopesJSON), &oauth2.Scopes)
-		}
-
-		// Build grant types
-		grantTypes := &model.OAuth2GrantTypes{}
-		if authCodeEnabled {
-			grantTypes.AuthorizationCode = &model.AuthorizationCodeGrant{
-				Enabled:     authCodeEnabled,
-				CallbackURL: authCodeCallback,
-			}
-		}
-		if implicitEnabled {
-			grantTypes.Implicit = &model.ImplicitGrant{
-				Enabled:     implicitEnabled,
-				CallbackURL: implicitCallback,
-			}
-		}
-		if passwordEnabled {
-			grantTypes.Password = &model.PasswordGrant{Enabled: passwordEnabled}
-		}
-		if clientCredEnabled {
-			grantTypes.ClientCredentials = &model.ClientCredentialsGrant{Enabled: clientCredEnabled}
-		}
-		oauth2.GrantTypes = grantTypes
-		security.OAuth2 = oauth2
-	} else if !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-
-	// Return security config only if we have API key or OAuth2 config or XHubSignature config
-	if security.APIKey == nil && security.OAuth2 == nil && security.XHubSignature == nil {
-		return nil, nil
-	}
-
-	return security, nil
-}
-
-// Helper methods for CORS configuration
-func (r *APIRepo) insertCORSConfig(tx *sql.Tx, apiId string, cors *model.CORSConfig) error {
-	query := `
-		INSERT INTO api_cors_config (api_uuid, enabled, allow_origins, allow_methods,
-			allow_headers, expose_headers, max_age, allow_credentials)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`
-	_, err := tx.Exec(r.db.Rebind(query), apiId, cors.Enabled, cors.AllowOrigins,
-		cors.AllowMethods, cors.AllowHeaders, cors.ExposeHeaders,
-		cors.MaxAge, cors.AllowCredentials)
-	return err
-}
-
-func (r *APIRepo) loadCORSConfig(apiId string) (*model.CORSConfig, error) {
-	cors := &model.CORSConfig{}
-	query := `
-		SELECT enabled, allow_origins, allow_methods, allow_headers,
-			expose_headers, max_age, allow_credentials
-		FROM api_cors_config WHERE api_uuid = ?
-	`
-	err := r.db.QueryRow(r.db.Rebind(query), apiId).Scan(&cors.Enabled, &cors.AllowOrigins,
-		&cors.AllowMethods, &cors.AllowHeaders, &cors.ExposeHeaders,
-		&cors.MaxAge, &cors.AllowCredentials)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return cors, nil
-}
-
-// Helper methods for Rate Limiting configuration
-func (r *APIRepo) insertRateLimitingConfig(tx *sql.Tx, apiId string, rateLimiting *model.RateLimitingConfig) error {
-	query := `
-		INSERT INTO api_rate_limiting (api_uuid, enabled, rate_limit_count,
-			rate_limit_time_unit, stop_on_quota_reach)
-		VALUES (?, ?, ?, ?, ?)
-	`
-	_, err := tx.Exec(r.db.Rebind(query), apiId, rateLimiting.Enabled, rateLimiting.RateLimitCount,
-		rateLimiting.RateLimitTimeUnit, rateLimiting.StopOnQuotaReach)
-	return err
-}
-
-func (r *APIRepo) loadRateLimitingConfig(apiId string) (*model.RateLimitingConfig, error) {
-	rateLimiting := &model.RateLimitingConfig{}
-	query := `
-		SELECT enabled, rate_limit_count, rate_limit_time_unit, stop_on_quota_reach
-		FROM api_rate_limiting WHERE api_uuid = ?
-	`
-	err := r.db.QueryRow(r.db.Rebind(query), apiId).Scan(&rateLimiting.Enabled,
-		&rateLimiting.RateLimitCount, &rateLimiting.RateLimitTimeUnit,
-		&rateLimiting.StopOnQuotaReach)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return rateLimiting, nil
 }
 
 // Helper methods for Operations

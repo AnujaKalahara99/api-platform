@@ -49,12 +49,9 @@ CREATE TABLE IF NOT EXISTS apis (
     project_uuid VARCHAR(40) NOT NULL,
     organization_uuid VARCHAR(40) NOT NULL,
     lifecycle_status VARCHAR(20) DEFAULT 'CREATED',
-    has_thumbnail BOOLEAN DEFAULT FALSE,
-    is_default_version BOOLEAN DEFAULT FALSE,
     type VARCHAR(20) DEFAULT 'HTTP',
     transport VARCHAR(255), -- JSON array as TEXT
     policies TEXT DEFAULT '[]', -- JSON array as TEXT
-    security_enabled BOOLEAN,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_uuid) REFERENCES projects(uuid) ON DELETE CASCADE,
@@ -76,17 +73,6 @@ CREATE TABLE IF NOT EXISTS api_mtls_config (
     FOREIGN KEY (api_uuid) REFERENCES apis(uuid) ON DELETE CASCADE
 );
 
--- API Key Security Configuration table
-CREATE TABLE IF NOT EXISTS api_key_security (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    api_uuid VARCHAR(40) NOT NULL,
-    enabled BOOLEAN,
-    header VARCHAR(255),
-    query VARCHAR(255),
-    cookie VARCHAR(255),
-    FOREIGN KEY (api_uuid) REFERENCES apis(uuid) ON DELETE CASCADE
-);
-
 -- XHub Signature Security Configuration table
 CREATE TABLE IF NOT EXISTS xhub_signature_security (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,35 +81,6 @@ CREATE TABLE IF NOT EXISTS xhub_signature_security (
     header VARCHAR(255),
     algorithm VARCHAR(50),
     secret VARCHAR(255),
-    FOREIGN KEY (api_uuid) REFERENCES apis(uuid) ON DELETE CASCADE
-);
-
--- OAuth2 Security Configuration table
-CREATE TABLE IF NOT EXISTS oauth2_security (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    api_uuid VARCHAR(40) NOT NULL,
-    enabled BOOLEAN,
-    authorization_code_enabled BOOLEAN,
-    authorization_code_callback_url VARCHAR(255),
-    implicit_enabled BOOLEAN,
-    implicit_callback_url VARCHAR(255),
-    password_enabled BOOLEAN,
-    client_credentials_enabled BOOLEAN,
-    scopes TEXT, -- JSON array as TEXT
-    FOREIGN KEY (api_uuid) REFERENCES apis(uuid) ON DELETE CASCADE
-);
-
--- CORS Configuration table
-CREATE TABLE IF NOT EXISTS api_cors_config (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    api_uuid VARCHAR(40) NOT NULL,
-    enabled BOOLEAN DEFAULT FALSE,
-    allow_origins TEXT,
-    allow_methods TEXT,
-    allow_headers TEXT,
-    expose_headers TEXT,
-    max_age INTEGER,
-    allow_credentials BOOLEAN,
     FOREIGN KEY (api_uuid) REFERENCES apis(uuid) ON DELETE CASCADE
 );
 
@@ -182,17 +139,6 @@ CREATE TABLE IF NOT EXISTS backend_endpoints (
     FOREIGN KEY (backend_service_uuid) REFERENCES backend_services(uuid) ON DELETE CASCADE
 );
 
--- API Rate Limiting Configuration table
-CREATE TABLE IF NOT EXISTS api_rate_limiting (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    api_uuid VARCHAR(40) NOT NULL,
-    enabled BOOLEAN DEFAULT FALSE,
-    rate_limit_count INTEGER,
-    rate_limit_time_unit VARCHAR(10),
-    stop_on_quota_reach BOOLEAN DEFAULT TRUE,
-    FOREIGN KEY (api_uuid) REFERENCES apis(uuid) ON DELETE CASCADE
-);
-
 -- API Operations table
 CREATE TABLE IF NOT EXISTS api_operations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -226,6 +172,7 @@ CREATE TABLE IF NOT EXISTS gateways (
     name VARCHAR(255) NOT NULL,
     display_name VARCHAR(255) NOT NULL,
     description VARCHAR(1023),
+    properties TEXT NOT NULL DEFAULT '{}',
     vhost VARCHAR(255) NOT NULL,
     is_critical BOOLEAN DEFAULT FALSE,
     gateway_functionality_type VARCHAR(20) DEFAULT 'regular' NOT NULL,

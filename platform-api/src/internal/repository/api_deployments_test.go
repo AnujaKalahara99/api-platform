@@ -83,11 +83,8 @@ func createTestSchema(db *database.DB) error {
 			project_uuid TEXT,
 			organization_uuid TEXT NOT NULL,
 			lifecycle_status TEXT DEFAULT 'CREATED',
-			has_thumbnail BOOLEAN DEFAULT FALSE,
-			is_default_version BOOLEAN DEFAULT FALSE,
 			type TEXT DEFAULT 'REST',
 			transport TEXT,
-			security_enabled BOOLEAN DEFAULT FALSE,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);

@@ -23,30 +23,25 @@ import (
 
 // API represents an API entity in the platform
 type API struct {
-	ID               string              `json:"id" db:"uuid"`
-	Handle           string              `json:"handle" db:"handle"`
-	Name             string              `json:"name" db:"name"`
-	Description      string              `json:"description,omitempty" db:"description"`
-	Context          string              `json:"context" db:"context"`
-	Version          string              `json:"version" db:"version"`
-	Provider         string              `json:"provider,omitempty" db:"provider"`
-	ProjectID        string              `json:"projectId" db:"project_uuid"`           // FK to Project.ID
-	OrganizationID   string              `json:"organizationId" db:"organization_uuid"` // FK to Organization.ID
-	CreatedAt        time.Time           `json:"createdAt,omitempty" db:"created_at"`
-	UpdatedAt        time.Time           `json:"updatedAt,omitempty" db:"updated_at"`
-	LifeCycleStatus  string              `json:"lifeCycleStatus,omitempty" db:"lifecycle_status"`
-	HasThumbnail     bool                `json:"hasThumbnail,omitempty" db:"has_thumbnail"`
-	IsDefaultVersion bool                `json:"isDefaultVersion,omitempty" db:"is_default_version"`
-	Type             string              `json:"type,omitempty" db:"type"`
-	Transport        []string            `json:"transport,omitempty" db:"transport"`
-	MTLS             *MTLSConfig         `json:"mtls,omitempty"`
-	Security         *SecurityConfig     `json:"security,omitempty"`
-	CORS             *CORSConfig         `json:"cors,omitempty"`
-	BackendServices  []BackendService    `json:"backend-services,omitempty"`
-	APIRateLimiting  *RateLimitingConfig `json:"api-rate-limiting,omitempty"`
-	Policies         []Policy            `json:"policies,omitempty"`
-	Operations       []Operation         `json:"operations,omitempty"`
-	Channels         []Channel           `json:"channels,omitempty"`
+	ID               string           `json:"id" db:"uuid"`
+	Handle           string           `json:"handle" db:"handle"`
+	Name             string           `json:"name" db:"name"`
+	Description      string           `json:"description,omitempty" db:"description"`
+	Context          string           `json:"context" db:"context"`
+	Version          string           `json:"version" db:"version"`
+	Provider         string           `json:"provider,omitempty" db:"provider"`
+	ProjectID        string           `json:"projectId" db:"project_uuid"`           // FK to Project.ID
+	OrganizationID   string           `json:"organizationId" db:"organization_uuid"` // FK to Organization.ID
+	CreatedAt        time.Time        `json:"createdAt,omitempty" db:"created_at"`
+	UpdatedAt        time.Time        `json:"updatedAt,omitempty" db:"updated_at"`
+	LifeCycleStatus  string           `json:"lifeCycleStatus,omitempty" db:"lifecycle_status"`
+	Type             string           `json:"type,omitempty" db:"type"`
+	Transport        []string         `json:"transport,omitempty" db:"transport"`
+	MTLS             *MTLSConfig      `json:"mtls,omitempty"`
+	BackendServices  []BackendService `json:"backend-services,omitempty"`
+	Policies         []Policy         `json:"policies,omitempty"`
+	Operations       []Operation      `json:"operations,omitempty"`
+	Channels         []Channel        `json:"channels,omitempty"`
 }
 
 // TableName returns the table name for the API model
@@ -73,75 +68,12 @@ type MTLSConfig struct {
 	CACert                     string `json:"caCert,omitempty"`
 }
 
-// SecurityConfig represents security configuration
-type SecurityConfig struct {
-	Enabled       bool                   `json:"enabled,omitempty"`
-	APIKey        *APIKeySecurity        `json:"apiKey,omitempty"`
-	OAuth2        *OAuth2Security        `json:"oauth2,omitempty"`
-	XHubSignature *XHubSignatureSecurity `json:"xHubSignature,omitempty"`
-}
-
 // XHubSignature represents X-Hub-Signature security configuration
 type XHubSignatureSecurity struct {
 	Enabled   bool   `json:"enabled,omitempty"`
 	Header    string `json:"header,omitempty"`
 	Secret    string `json:"secret,omitempty"`
 	Algorithm string `json:"algorithm,omitempty"`
-}
-
-// APIKeySecurity represents API key security configuration
-type APIKeySecurity struct {
-	Enabled bool   `json:"enabled,omitempty"`
-	Header  string `json:"header,omitempty"`
-	Query   string `json:"query,omitempty"`
-	Cookie  string `json:"cookie,omitempty"`
-}
-
-// OAuth2Security represents OAuth2 security configuration
-type OAuth2Security struct {
-	GrantTypes *OAuth2GrantTypes `json:"grantTypes,omitempty"`
-	Scopes     []string          `json:"scopes,omitempty"`
-}
-
-// OAuth2GrantTypes represents OAuth2 grant types configuration
-type OAuth2GrantTypes struct {
-	AuthorizationCode *AuthorizationCodeGrant `json:"authorizationCode,omitempty"`
-	Implicit          *ImplicitGrant          `json:"implicit,omitempty"`
-	Password          *PasswordGrant          `json:"password,omitempty"`
-	ClientCredentials *ClientCredentialsGrant `json:"clientCredentials,omitempty"`
-}
-
-// AuthorizationCodeGrant represents authorization code grant configuration
-type AuthorizationCodeGrant struct {
-	Enabled     bool   `json:"enabled,omitempty"`
-	CallbackURL string `json:"callbackUrl,omitempty"`
-}
-
-// ImplicitGrant represents implicit grant configuration
-type ImplicitGrant struct {
-	Enabled     bool   `json:"enabled,omitempty"`
-	CallbackURL string `json:"callbackUrl,omitempty"`
-}
-
-// PasswordGrant represents password grant configuration
-type PasswordGrant struct {
-	Enabled bool `json:"enabled,omitempty"`
-}
-
-// ClientCredentialsGrant represents client credentials grant configuration
-type ClientCredentialsGrant struct {
-	Enabled bool `json:"enabled,omitempty"`
-}
-
-// CORSConfig represents CORS configuration
-type CORSConfig struct {
-	Enabled          bool   `json:"enabled,omitempty"`
-	AllowOrigins     string `json:"allowOrigins,omitempty"`
-	AllowMethods     string `json:"allowMethods,omitempty"`
-	AllowHeaders     string `json:"allowHeaders,omitempty"`
-	ExposeHeaders    string `json:"exposeHeaders,omitempty"`
-	MaxAge           int    `json:"maxAge,omitempty"`
-	AllowCredentials bool   `json:"allowCredentials,omitempty"`
 }
 
 // BackendService represents a backend service configuration
@@ -204,14 +136,6 @@ type CircuitBreakerConfig struct {
 	MaxPendingRequests int  `json:"maxPendingRequests,omitempty"`
 	MaxRequests        int  `json:"maxRequests,omitempty"`
 	MaxRetries         int  `json:"maxRetries,omitempty"`
-}
-
-// RateLimitingConfig represents rate limiting configuration
-type RateLimitingConfig struct {
-	Enabled           bool   `json:"enabled,omitempty"`
-	RateLimitCount    int    `json:"rateLimitCount,omitempty"`
-	RateLimitTimeUnit string `json:"rateLimitTimeUnit,omitempty"`
-	StopOnQuotaReach  bool   `json:"stopOnQuotaReach,omitempty"`
 }
 
 // Operation represents an API operation
@@ -279,7 +203,7 @@ type APIDeployment struct {
 	Content          []byte                 `json:"-" db:"content"`
 	Metadata         map[string]interface{} `json:"metadata,omitempty" db:"metadata"`
 	CreatedAt        time.Time              `json:"createdAt" db:"created_at"`
-	
+
 	// Lifecycle state fields (from api_deployment_status table via JOIN)
 	// nil values indicate ARCHIVED state (no record in status table)
 	Status    *DeploymentStatus `json:"status,omitempty" db:"status"`

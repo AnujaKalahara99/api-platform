@@ -58,15 +58,10 @@ func (u *APIUtil) DTOToModel(dto *dto.API) *model.API {
 		ProjectID:        dto.ProjectID,
 		OrganizationID:   dto.OrganizationID,
 		LifeCycleStatus:  dto.LifeCycleStatus,
-		HasThumbnail:     dto.HasThumbnail,
-		IsDefaultVersion: dto.IsDefaultVersion,
 		Type:             dto.Type,
 		Transport:        dto.Transport,
 		MTLS:             u.MTLSDTOToModel(dto.MTLS),
-		Security:         u.SecurityDTOToModel(dto.Security),
-		CORS:             u.CORSDTOToModel(dto.CORS),
 		BackendServices:  u.BackendServicesDTOToModel(dto.BackendServices),
-		APIRateLimiting:  u.RateLimitingDTOToModel(dto.APIRateLimiting),
 		Policies:         u.PoliciesDTOToModel(dto.Policies),
 		Operations:       u.OperationsDTOToModel(dto.Operations),
 		Channels:         u.ChannelsDTOToModel(dto.Channels),
@@ -93,15 +88,10 @@ func (u *APIUtil) ModelToDTO(model *model.API) *dto.API {
 		CreatedAt:        model.CreatedAt,
 		UpdatedAt:        model.UpdatedAt,
 		LifeCycleStatus:  model.LifeCycleStatus,
-		HasThumbnail:     model.HasThumbnail,
-		IsDefaultVersion: model.IsDefaultVersion,
 		Type:             model.Type,
 		Transport:        model.Transport,
 		MTLS:             u.MTLSModelToDTO(model.MTLS),
-		Security:         u.SecurityModelToDTO(model.Security),
-		CORS:             u.CORSModelToDTO(model.CORS),
 		BackendServices:  u.BackendServicesModelToDTO(model.BackendServices),
-		APIRateLimiting:  u.RateLimitingModelToDTO(model.APIRateLimiting),
 		Policies:         u.PoliciesModelToDTO(model.Policies),
 		Operations:       u.OperationsModelToDTO(model.Operations),
 		Channels:         u.ChannelsModelToDTO(model.Channels),
@@ -121,117 +111,6 @@ func (u *APIUtil) MTLSDTOToModel(dto *dto.MTLSConfig) *model.MTLSConfig {
 		ClientCert:                 dto.ClientCert,
 		ClientKey:                  dto.ClientKey,
 		CACert:                     dto.CACert,
-	}
-}
-
-func (u *APIUtil) SecurityDTOToModel(dto *dto.SecurityConfig) *model.SecurityConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.SecurityConfig{
-		Enabled:       dto.Enabled,
-		APIKey:        u.APIKeyDTOToModel(dto.APIKey),
-		OAuth2:        u.OAuth2DTOToModel(dto.OAuth2),
-		XHubSignature: u.XHubSignatureDTOToModel(dto.XHubSignature),
-	}
-}
-
-func (u *APIUtil) XHubSignatureDTOToModel(dto *dto.XHubSignatureSecurity) *model.XHubSignatureSecurity {
-	if dto == nil {
-		return nil
-	}
-	return &model.XHubSignatureSecurity{
-		Enabled:   dto.Enabled,
-		Header:    dto.Header,
-		Secret:    dto.Secret,
-		Algorithm: dto.Algorithm,
-	}
-}
-
-func (u *APIUtil) APIKeyDTOToModel(dto *dto.APIKeySecurity) *model.APIKeySecurity {
-	if dto == nil {
-		return nil
-	}
-	return &model.APIKeySecurity{
-		Enabled: dto.Enabled,
-		Header:  dto.Header,
-		Query:   dto.Query,
-		Cookie:  dto.Cookie,
-	}
-}
-
-func (u *APIUtil) OAuth2DTOToModel(dto *dto.OAuth2Security) *model.OAuth2Security {
-	if dto == nil {
-		return nil
-	}
-	return &model.OAuth2Security{
-		GrantTypes: u.OAuth2GrantTypesDTOToModel(dto.GrantTypes),
-		Scopes:     dto.Scopes,
-	}
-}
-
-func (u *APIUtil) OAuth2GrantTypesDTOToModel(dto *dto.OAuth2GrantTypes) *model.OAuth2GrantTypes {
-	if dto == nil {
-		return nil
-	}
-	return &model.OAuth2GrantTypes{
-		AuthorizationCode: u.AuthCodeGrantDTOToModel(dto.AuthorizationCode),
-		Implicit:          u.ImplicitGrantDTOToModel(dto.Implicit),
-		Password:          u.PasswordGrantDTOToModel(dto.Password),
-		ClientCredentials: u.ClientCredGrantDTOToModel(dto.ClientCredentials),
-	}
-}
-
-func (u *APIUtil) AuthCodeGrantDTOToModel(dto *dto.AuthorizationCodeGrant) *model.AuthorizationCodeGrant {
-	if dto == nil {
-		return nil
-	}
-	return &model.AuthorizationCodeGrant{
-		Enabled:     dto.Enabled,
-		CallbackURL: dto.CallbackURL,
-	}
-}
-
-func (u *APIUtil) ImplicitGrantDTOToModel(dto *dto.ImplicitGrant) *model.ImplicitGrant {
-	if dto == nil {
-		return nil
-	}
-	return &model.ImplicitGrant{
-		Enabled:     dto.Enabled,
-		CallbackURL: dto.CallbackURL,
-	}
-}
-
-func (u *APIUtil) PasswordGrantDTOToModel(dto *dto.PasswordGrant) *model.PasswordGrant {
-	if dto == nil {
-		return nil
-	}
-	return &model.PasswordGrant{
-		Enabled: dto.Enabled,
-	}
-}
-
-func (u *APIUtil) ClientCredGrantDTOToModel(dto *dto.ClientCredentialsGrant) *model.ClientCredentialsGrant {
-	if dto == nil {
-		return nil
-	}
-	return &model.ClientCredentialsGrant{
-		Enabled: dto.Enabled,
-	}
-}
-
-func (u *APIUtil) CORSDTOToModel(dto *dto.CORSConfig) *model.CORSConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.CORSConfig{
-		Enabled:          dto.Enabled,
-		AllowOrigins:     dto.AllowOrigins,
-		AllowMethods:     dto.AllowMethods,
-		AllowHeaders:     dto.AllowHeaders,
-		ExposeHeaders:    dto.ExposeHeaders,
-		MaxAge:           dto.MaxAge,
-		AllowCredentials: dto.AllowCredentials,
 	}
 }
 
@@ -328,18 +207,6 @@ func (u *APIUtil) CircuitBreakerDTOToModel(dto *dto.CircuitBreakerConfig) *model
 		MaxPendingRequests: dto.MaxPendingRequests,
 		MaxRequests:        dto.MaxRequests,
 		MaxRetries:         dto.MaxRetries,
-	}
-}
-
-func (u *APIUtil) RateLimitingDTOToModel(dto *dto.RateLimitingConfig) *model.RateLimitingConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.RateLimitingConfig{
-		Enabled:           dto.Enabled,
-		RateLimitCount:    dto.RateLimitCount,
-		RateLimitTimeUnit: dto.RateLimitTimeUnit,
-		StopOnQuotaReach:  dto.StopOnQuotaReach,
 	}
 }
 
@@ -483,117 +350,6 @@ func (u *APIUtil) MTLSModelToDTO(model *model.MTLSConfig) *dto.MTLSConfig {
 	}
 }
 
-func (u *APIUtil) SecurityModelToDTO(model *model.SecurityConfig) *dto.SecurityConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.SecurityConfig{
-		Enabled:       model.Enabled,
-		APIKey:        u.APIKeyModelToDTO(model.APIKey),
-		OAuth2:        u.OAuth2ModelToDTO(model.OAuth2),
-		XHubSignature: u.XHubSignatureModelToDTO(model.XHubSignature),
-	}
-}
-
-func (u *APIUtil) XHubSignatureModelToDTO(model *model.XHubSignatureSecurity) *dto.XHubSignatureSecurity {
-	if model == nil {
-		return nil
-	}
-	return &dto.XHubSignatureSecurity{
-		Enabled:   model.Enabled,
-		Header:    model.Header,
-		Secret:    model.Secret,
-		Algorithm: model.Algorithm,
-	}
-}
-
-func (u *APIUtil) APIKeyModelToDTO(model *model.APIKeySecurity) *dto.APIKeySecurity {
-	if model == nil {
-		return nil
-	}
-	return &dto.APIKeySecurity{
-		Enabled: model.Enabled,
-		Header:  model.Header,
-		Query:   model.Query,
-		Cookie:  model.Cookie,
-	}
-}
-
-func (u *APIUtil) OAuth2ModelToDTO(model *model.OAuth2Security) *dto.OAuth2Security {
-	if model == nil {
-		return nil
-	}
-	return &dto.OAuth2Security{
-		GrantTypes: u.OAuth2GrantTypesModelToDTO(model.GrantTypes),
-		Scopes:     model.Scopes,
-	}
-}
-
-func (u *APIUtil) OAuth2GrantTypesModelToDTO(model *model.OAuth2GrantTypes) *dto.OAuth2GrantTypes {
-	if model == nil {
-		return nil
-	}
-	return &dto.OAuth2GrantTypes{
-		AuthorizationCode: u.AuthCodeGrantModelToDTO(model.AuthorizationCode),
-		Implicit:          u.ImplicitGrantModelToDTO(model.Implicit),
-		Password:          u.PasswordGrantModelToDTO(model.Password),
-		ClientCredentials: u.ClientCredGrantModelToDTO(model.ClientCredentials),
-	}
-}
-
-func (u *APIUtil) AuthCodeGrantModelToDTO(model *model.AuthorizationCodeGrant) *dto.AuthorizationCodeGrant {
-	if model == nil {
-		return nil
-	}
-	return &dto.AuthorizationCodeGrant{
-		Enabled:     model.Enabled,
-		CallbackURL: model.CallbackURL,
-	}
-}
-
-func (u *APIUtil) ImplicitGrantModelToDTO(model *model.ImplicitGrant) *dto.ImplicitGrant {
-	if model == nil {
-		return nil
-	}
-	return &dto.ImplicitGrant{
-		Enabled:     model.Enabled,
-		CallbackURL: model.CallbackURL,
-	}
-}
-
-func (u *APIUtil) PasswordGrantModelToDTO(model *model.PasswordGrant) *dto.PasswordGrant {
-	if model == nil {
-		return nil
-	}
-	return &dto.PasswordGrant{
-		Enabled: model.Enabled,
-	}
-}
-
-func (u *APIUtil) ClientCredGrantModelToDTO(model *model.ClientCredentialsGrant) *dto.ClientCredentialsGrant {
-	if model == nil {
-		return nil
-	}
-	return &dto.ClientCredentialsGrant{
-		Enabled: model.Enabled,
-	}
-}
-
-func (u *APIUtil) CORSModelToDTO(model *model.CORSConfig) *dto.CORSConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.CORSConfig{
-		Enabled:          model.Enabled,
-		AllowOrigins:     model.AllowOrigins,
-		AllowMethods:     model.AllowMethods,
-		AllowHeaders:     model.AllowHeaders,
-		ExposeHeaders:    model.ExposeHeaders,
-		MaxAge:           model.MaxAge,
-		AllowCredentials: model.AllowCredentials,
-	}
-}
-
 func (u *APIUtil) BackendServicesModelToDTO(models []model.BackendService) []dto.BackendService {
 	if models == nil {
 		return nil
@@ -687,18 +443,6 @@ func (u *APIUtil) CircuitBreakerModelToDTO(model *model.CircuitBreakerConfig) *d
 		MaxPendingRequests: model.MaxPendingRequests,
 		MaxRequests:        model.MaxRequests,
 		MaxRetries:         model.MaxRetries,
-	}
-}
-
-func (u *APIUtil) RateLimitingModelToDTO(model *model.RateLimitingConfig) *dto.RateLimitingConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.RateLimitingConfig{
-		Enabled:           model.Enabled,
-		RateLimitCount:    model.RateLimitCount,
-		RateLimitTimeUnit: model.RateLimitTimeUnit,
-		StopOnQuotaReach:  model.StopOnQuotaReach,
 	}
 }
 
@@ -941,18 +685,6 @@ func (u *APIUtil) GenerateOpenAPIDefinition(api *dto.API, req *devportal_client.
 		Paths:   u.buildPathsSection(api),
 	}
 
-	// Add security schemes if configured
-	if securitySchemes := u.buildSecuritySchemes(api); len(securitySchemes) > 0 {
-		openAPISpec.Components = &dto.Components{
-			SecuritySchemes: securitySchemes,
-		}
-	}
-
-	// Add global security if configured
-	if globalSecurity := u.buildGlobalSecurity(api); len(globalSecurity) > 0 {
-		openAPISpec.Security = globalSecurity
-	}
-
 	// Marshal to JSON
 	apiDefinition, err := json.Marshal(openAPISpec)
 	if err != nil {
@@ -1042,13 +774,8 @@ func (u *APIUtil) buildPathsSection(api *dto.API) map[string]dto.PathItem {
 		}
 
 		// Add parameters inferred from the path or authentication when present
-		if parameters := u.buildParameters(path, operation, api); len(parameters) > 0 {
+		if parameters := u.buildParameters(path); len(parameters) > 0 {
 			operationSpec.Parameters = parameters
-		}
-
-		// Add security requirements only if operation has authentication configured
-		if operationSecurity := u.buildOperationSecurity(operation, api); len(operationSecurity) > 0 {
-			operationSpec.Security = operationSecurity
 		}
 
 		// Set the operation on the pathItem
@@ -1078,7 +805,7 @@ func (u *APIUtil) buildPathsSection(api *dto.API) map[string]dto.PathItem {
 }
 
 // buildParameters extracts path, query, and header parameters from the path
-func (u *APIUtil) buildParameters(path string, operation dto.Operation, api *dto.API) []dto.Parameter {
+func (u *APIUtil) buildParameters(path string) []dto.Parameter {
 	var parameters []dto.Parameter
 
 	// Extract path parameters (e.g., {id} -> id)
@@ -1098,114 +825,7 @@ func (u *APIUtil) buildParameters(path string, operation dto.Operation, api *dto
 		}
 	}
 
-	// Add common query parameters if applicable
-	if operation.Request != nil {
-		// Add authentication-related parameters
-		if operation.Request.Authentication != nil && operation.Request.Authentication.Required {
-			if api.Security != nil && api.Security.OAuth2 != nil && len(api.Security.OAuth2.Scopes) > 0 {
-				// For OAuth2, add Authorization header
-				parameters = append(parameters, dto.Parameter{
-					Name:        "Authorization",
-					In:          "header",
-					Required:    true,
-					Schema:      dto.Schema{Type: "string"},
-					Description: "Bearer token for authentication",
-				})
-			} else if api.Security != nil && api.Security.APIKey != nil && api.Security.APIKey.Enabled {
-				// For API Key, add the key parameter
-				paramName := u.getAPIKeyName(api.Security.APIKey)
-				in := u.getAPIKeyLocation(api.Security.APIKey)
-				parameters = append(parameters, dto.Parameter{
-					Name:        paramName,
-					In:          in,
-					Required:    true,
-					Schema:      dto.Schema{Type: "string"},
-					Description: "API key for authentication",
-				})
-			}
-		}
-	}
-
 	return parameters
-}
-
-// buildSecuritySchemes creates security scheme definitions
-func (u *APIUtil) buildSecuritySchemes(api *dto.API) map[string]dto.SecurityScheme {
-	schemes := make(map[string]dto.SecurityScheme)
-
-	if api.Security != nil {
-		// API Key security
-		if api.Security.APIKey != nil && api.Security.APIKey.Enabled {
-			schemes["ApiKeyAuth"] = dto.SecurityScheme{
-				Type: "apiKey",
-				In:   u.getAPIKeyLocation(api.Security.APIKey),
-				Name: u.getAPIKeyName(api.Security.APIKey),
-			}
-		}
-	}
-
-	return schemes
-}
-
-// getAPIKeyLocation determines where the API key is expected
-func (u *APIUtil) getAPIKeyLocation(apiKey *dto.APIKeySecurity) string {
-	if apiKey.Header != "" {
-		return "header"
-	}
-	if apiKey.Query != "" {
-		return "query"
-	}
-	if apiKey.Cookie != "" {
-		return "cookie"
-	}
-	return "header" // default
-}
-
-// getAPIKeyName gets the API key parameter name
-func (u *APIUtil) getAPIKeyName(apiKey *dto.APIKeySecurity) string {
-	if apiKey.Header != "" {
-		return apiKey.Header
-	}
-	if apiKey.Query != "" {
-		return apiKey.Query
-	}
-	if apiKey.Cookie != "" {
-		return apiKey.Cookie
-	}
-	return "X-API-Key" // default
-}
-
-// buildGlobalSecurity creates global security requirements
-func (u *APIUtil) buildGlobalSecurity(api *dto.API) []dto.SecurityRequirement {
-	var security []dto.SecurityRequirement
-
-	if api.Security != nil {
-		if api.Security.APIKey != nil && api.Security.APIKey.Enabled {
-			security = append(security, dto.SecurityRequirement{
-				"ApiKeyAuth": []string{},
-			})
-		}
-	}
-
-	return security
-}
-
-// buildOperationSecurity creates operation-specific security
-func (u *APIUtil) buildOperationSecurity(operation dto.Operation, api *dto.API) []dto.SecurityRequirement {
-	var security []dto.SecurityRequirement
-
-	if operation.Request != nil && operation.Request.Authentication != nil && operation.Request.Authentication.Required {
-		if api.Security != nil {
-			if api.Security.APIKey != nil && api.Security.APIKey.Enabled {
-				security = append(security, dto.SecurityRequirement{
-					"ApiKeyAuth": []string{},
-				})
-			}
-
-		}
-	}
-
-	return security
 }
 
 // ConvertAPIYAMLDataToDTO converts APIDeploymentYAML to API DTO
@@ -1280,8 +900,6 @@ func (u *APIUtil) APIYAMLDataToDTO(yamlData *dto.APIYAMLData) *dto.API {
 		LifeCycleStatus:  "CREATED",
 		Type:             "HTTP",
 		Transport:        []string{"http", "https"},
-		HasThumbnail:     false,
-		IsDefaultVersion: false,
 
 		// Fields that need to be set by caller:
 		// - ProjectID (required)
@@ -1858,19 +1476,5 @@ func (u *APIUtil) MergeAPIDetails(userAPI *dto.API, extractedAPI *dto.API) *dto.
 	if userAPI.MTLS != nil {
 		merged.MTLS = userAPI.MTLS
 	}
-	if userAPI.Security != nil {
-		merged.Security = userAPI.Security
-	}
-	if userAPI.CORS != nil {
-		merged.CORS = userAPI.CORS
-	}
-	if userAPI.APIRateLimiting != nil {
-		merged.APIRateLimiting = userAPI.APIRateLimiting
-	}
-
-	// Copy boolean fields from user input
-	merged.HasThumbnail = userAPI.HasThumbnail
-	merged.IsDefaultVersion = userAPI.IsDefaultVersion
-
 	return merged
 }
