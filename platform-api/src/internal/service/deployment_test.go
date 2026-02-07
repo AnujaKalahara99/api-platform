@@ -834,7 +834,7 @@ func TestUndeployDeployment(t *testing.T) {
 			mockDeployment: &model.APIDeployment{
 				DeploymentID: testDeploymentID,
 				Name:         "test-deployment",
-				ApiID:        testAPIUUID,
+				ArtifactID:   testAPIUUID,
 				GatewayID:    testGatewayID, // Different from provided gatewayID
 				Status:       &deployedStatus,
 			},

@@ -260,10 +260,6 @@ func (r *LLMProviderRepo) Create(p *model.LLMProvider) error {
 	if err != nil {
 		return err
 	}
-	securityJSON, err := json.Marshal(p.Security)
-	if err != nil {
-		return err
-	}
 	rateLimitingJSON, err := json.Marshal(p.RateLimiting)
 	if err != nil {
 		return err
@@ -287,9 +283,9 @@ func (r *LLMProviderRepo) Create(p *model.LLMProvider) error {
 	query := `
 		INSERT INTO llm_providers (
 			uuid, organization_uuid, handle, name, description, created_by, version, context, vhost, template,
-			upstream_url, upstream_auth, openapi_spec, model_list, rate_limiting, access_control, policies, security, status, created_at, updated_at
+			upstream_url, upstream_auth, openapi_spec, model_list, rate_limiting, access_control, policies, status, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -300,7 +296,7 @@ func (r *LLMProviderRepo) Create(p *model.LLMProvider) error {
 	_, err = tx.Exec(r.db.Rebind(query),
 		p.UUID, p.OrganizationUUID, p.ID, p.Name, p.Description, p.CreatedBy, p.Version, p.Context, p.VHost, p.Template,
 		p.UpstreamURL, string(upstreamAuthJSON), p.OpenAPISpec, string(modelProvidersJSON), string(rateLimitingJSON),
-		string(accessControlJSON), policiesColumn, string(securityJSON), p.Status,
+		string(accessControlJSON), policiesColumn, p.Status,
 		p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
@@ -316,18 +312,18 @@ func (r *LLMProviderRepo) Create(p *model.LLMProvider) error {
 func (r *LLMProviderRepo) GetByID(providerID, orgUUID string) (*model.LLMProvider, error) {
 	row := r.db.QueryRow(r.db.Rebind(`
 		SELECT uuid, organization_uuid, handle, name, description, created_by, version, context, vhost, template,
-			upstream_url, upstream_auth, openapi_spec, model_list, rate_limiting, access_control, policies, security, status, created_at, updated_at
+			upstream_url, upstream_auth, openapi_spec, model_list, rate_limiting, access_control, policies, status, created_at, updated_at
 		FROM llm_providers
 		WHERE handle = ? AND organization_uuid = ?
 	`), providerID, orgUUID)
 
 	var p model.LLMProvider
 	var upstreamURL, openAPISpec, modelProvidersRaw sql.NullString
-	var upstreamAuthJSON, rateLimitingJSON, accessControlJSON, policiesJSON, securityJSON sql.NullString
+	var upstreamAuthJSON, rateLimitingJSON, accessControlJSON, policiesJSON sql.NullString
 	if err := row.Scan(
 		&p.UUID, &p.OrganizationUUID, &p.ID, &p.Name, &p.Description, &p.CreatedBy, &p.Version, &p.Context, &p.VHost, &p.Template,
 		&upstreamURL, &upstreamAuthJSON, &openAPISpec, &modelProvidersRaw, &rateLimitingJSON,
-		&accessControlJSON, &policiesJSON, &securityJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&accessControlJSON, &policiesJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -365,11 +361,6 @@ func (r *LLMProviderRepo) GetByID(providerID, orgUUID string) (*model.LLMProvide
 			return nil, fmt.Errorf("unmarshal accessControl for provider %s: %w", p.ID, err)
 		}
 	}
-	if securityJSON.Valid && securityJSON.String != "" {
-		if err := json.Unmarshal([]byte(securityJSON.String), &p.Security); err != nil {
-			return nil, fmt.Errorf("unmarshal security for provider %s: %w", p.ID, err)
-		}
-	}
 
 	return &p, nil
 }
@@ -377,7 +368,7 @@ func (r *LLMProviderRepo) GetByID(providerID, orgUUID string) (*model.LLMProvide
 func (r *LLMProviderRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProvider, error) {
 	rows, err := r.db.Query(r.db.Rebind(`
 		SELECT uuid, organization_uuid, handle, name, description, created_by, version, context, vhost, template,
-			upstream_url, upstream_auth, openapi_spec, model_list, rate_limiting, access_control, policies, security, status, created_at, updated_at
+			upstream_url, upstream_auth, openapi_spec, model_list, rate_limiting, access_control, policies, status, created_at, updated_at
 		FROM llm_providers
 		WHERE organization_uuid = ?
 		ORDER BY created_at DESC
@@ -392,11 +383,11 @@ func (r *LLMProviderRepo) List(orgUUID string, limit, offset int) ([]*model.LLMP
 	for rows.Next() {
 		var p model.LLMProvider
 		var upstreamURL, openAPISpec, modelProvidersRaw sql.NullString
-		var upstreamAuthJSON, rateLimitingJSON, accessControlJSON, policiesJSON, securityJSON sql.NullString
+		var upstreamAuthJSON, rateLimitingJSON, accessControlJSON, policiesJSON sql.NullString
 		err := rows.Scan(
 			&p.UUID, &p.OrganizationUUID, &p.ID, &p.Name, &p.Description, &p.CreatedBy, &p.Version, &p.Context, &p.VHost, &p.Template,
 			&upstreamURL, &upstreamAuthJSON, &openAPISpec, &modelProvidersRaw, &rateLimitingJSON,
-			&accessControlJSON, &policiesJSON, &securityJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+			&accessControlJSON, &policiesJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -430,11 +421,6 @@ func (r *LLMProviderRepo) List(orgUUID string, limit, offset int) ([]*model.LLMP
 				return nil, fmt.Errorf("unmarshal accessControl for provider %s: %w", p.ID, err)
 			}
 		}
-		if securityJSON.Valid && securityJSON.String != "" {
-			if err := json.Unmarshal([]byte(securityJSON.String), &p.Security); err != nil {
-				return nil, fmt.Errorf("unmarshal security for provider %s: %w", p.ID, err)
-			}
-		}
 		res = append(res, &p)
 	}
 	return res, rows.Err()
@@ -452,10 +438,6 @@ func (r *LLMProviderRepo) Update(p *model.LLMProvider) error {
 	p.UpdatedAt = time.Now()
 
 	policiesColumn, err := marshalPolicies(p.Policies)
-	if err != nil {
-		return err
-	}
-	securityJSON, err := json.Marshal(p.Security)
 	if err != nil {
 		return err
 	}
@@ -482,7 +464,7 @@ func (r *LLMProviderRepo) Update(p *model.LLMProvider) error {
 	query := `
 		UPDATE llm_providers
 		SET name = ?, description = ?, version = ?, context = ?, vhost = ?, template = ?,
-			upstream_url = ?, upstream_auth = ?, openapi_spec = ?, model_list = ?, rate_limiting = ?, access_control = ?, policies = ?, security = ?, status = ?, updated_at = ?
+			upstream_url = ?, upstream_auth = ?, openapi_spec = ?, model_list = ?, rate_limiting = ?, access_control = ?, policies = ?, status = ?, updated_at = ?
 		WHERE handle = ? AND organization_uuid = ?
 	`
 	tx, err := r.db.Begin()
@@ -494,7 +476,7 @@ func (r *LLMProviderRepo) Update(p *model.LLMProvider) error {
 	result, err := tx.Exec(r.db.Rebind(query),
 		p.Name, p.Description, p.Version, p.Context, p.VHost, p.Template,
 		p.UpstreamURL, string(upstreamAuthJSON), p.OpenAPISpec, string(modelProvidersJSON), string(rateLimitingJSON),
-		string(accessControlJSON), policiesColumn, string(securityJSON), p.Status, p.UpdatedAt,
+		string(accessControlJSON), policiesColumn, p.Status, p.UpdatedAt,
 		p.ID, p.OrganizationUUID,
 	)
 	if err != nil {
@@ -570,17 +552,13 @@ func (r *LLMProxyRepo) Create(p *model.LLMProxy) error {
 	if err != nil {
 		return err
 	}
-	securityJSON, err := json.Marshal(p.Security)
-	if err != nil {
-		return err
-	}
 
 	query := `
 		INSERT INTO llm_proxies (
 			uuid, organization_uuid, project_uuid, handle, name, description, created_by, version, context, vhost, provider,
-			openapi_spec, policies, security, status, created_at, updated_at
+			openapi_spec, policies, status, created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 	tx, err := r.db.Begin()
 	if err != nil {
@@ -590,7 +568,7 @@ func (r *LLMProxyRepo) Create(p *model.LLMProxy) error {
 
 	_, err = tx.Exec(r.db.Rebind(query),
 		p.UUID, p.OrganizationUUID, p.ProjectUUID, p.ID, p.Name, p.Description, p.CreatedBy, p.Version, p.Context, p.VHost, p.Provider,
-		p.OpenAPISpec, policiesColumn, string(securityJSON), p.Status,
+		p.OpenAPISpec, policiesColumn, p.Status,
 		p.CreatedAt, p.UpdatedAt,
 	)
 	if err != nil {
@@ -606,16 +584,16 @@ func (r *LLMProxyRepo) Create(p *model.LLMProxy) error {
 func (r *LLMProxyRepo) GetByID(proxyID, orgUUID string) (*model.LLMProxy, error) {
 	row := r.db.QueryRow(r.db.Rebind(`
 		SELECT uuid, organization_uuid, project_uuid, handle, name, description, created_by, version, context, vhost, provider,
-				openapi_spec, policies, security, status, created_at, updated_at
+				openapi_spec, policies, status, created_at, updated_at
 		FROM llm_proxies
 		WHERE handle = ? AND organization_uuid = ?
 	`), proxyID, orgUUID)
 
 	var p model.LLMProxy
-	var openAPISpec, policiesJSON, securityJSON sql.NullString
+	var openAPISpec, policiesJSON sql.NullString
 	if err := row.Scan(
 		&p.UUID, &p.OrganizationUUID, &p.ProjectUUID, &p.ID, &p.Name, &p.Description, &p.CreatedBy, &p.Version, &p.Context, &p.VHost, &p.Provider,
-		&openAPISpec, &policiesJSON, &securityJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+		&openAPISpec, &policiesJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 	); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -631,11 +609,6 @@ func (r *LLMProxyRepo) GetByID(proxyID, orgUUID string) (*model.LLMProxy, error)
 		return nil, fmt.Errorf("unmarshal policies for proxy %s: %w", p.ID, err)
 	}
 	p.Policies = policies
-	if securityJSON.Valid && securityJSON.String != "" {
-		if err := json.Unmarshal([]byte(securityJSON.String), &p.Security); err != nil {
-			return nil, fmt.Errorf("unmarshal security for proxy %s: %w", p.ID, err)
-		}
-	}
 
 	return &p, nil
 }
@@ -643,7 +616,7 @@ func (r *LLMProxyRepo) GetByID(proxyID, orgUUID string) (*model.LLMProxy, error)
 func (r *LLMProxyRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProxy, error) {
 	rows, err := r.db.Query(r.db.Rebind(`
 		SELECT uuid, organization_uuid, project_uuid, handle, name, description, created_by, version, context, vhost, provider,
-				openapi_spec, policies, security, status, created_at, updated_at
+				openapi_spec, policies, status, created_at, updated_at
 		FROM llm_proxies
 		WHERE organization_uuid = ?
 		ORDER BY created_at DESC
@@ -657,10 +630,10 @@ func (r *LLMProxyRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProx
 	var res []*model.LLMProxy
 	for rows.Next() {
 		var p model.LLMProxy
-		var openAPISpec, policiesJSON, securityJSON sql.NullString
+		var openAPISpec, policiesJSON sql.NullString
 		err := rows.Scan(
 			&p.UUID, &p.OrganizationUUID, &p.ProjectUUID, &p.ID, &p.Name, &p.Description, &p.CreatedBy, &p.Version, &p.Context, &p.VHost, &p.Provider,
-			&openAPISpec, &policiesJSON, &securityJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+			&openAPISpec, &policiesJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -673,11 +646,6 @@ func (r *LLMProxyRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProx
 			return nil, fmt.Errorf("unmarshal policies for proxy %s: %w", p.ID, err)
 		}
 		p.Policies = policies
-		if securityJSON.Valid && securityJSON.String != "" {
-			if err := json.Unmarshal([]byte(securityJSON.String), &p.Security); err != nil {
-				return nil, fmt.Errorf("unmarshal security for proxy %s: %w", p.ID, err)
-			}
-		}
 		res = append(res, &p)
 	}
 	return res, rows.Err()
@@ -686,7 +654,7 @@ func (r *LLMProxyRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProx
 func (r *LLMProxyRepo) ListByProject(orgUUID, projectUUID string, limit, offset int) ([]*model.LLMProxy, error) {
 	rows, err := r.db.Query(r.db.Rebind(`
 		SELECT uuid, organization_uuid, project_uuid, handle, name, description, created_by, version, context, vhost, provider,
-				openapi_spec, policies, security, status, created_at, updated_at
+				openapi_spec, policies, status, created_at, updated_at
 		FROM llm_proxies
 		WHERE organization_uuid = ? AND project_uuid = ?
 		ORDER BY created_at DESC
@@ -700,10 +668,10 @@ func (r *LLMProxyRepo) ListByProject(orgUUID, projectUUID string, limit, offset 
 	var res []*model.LLMProxy
 	for rows.Next() {
 		var p model.LLMProxy
-		var openAPISpec, policiesJSON, securityJSON sql.NullString
+		var openAPISpec, policiesJSON sql.NullString
 		err := rows.Scan(
 			&p.UUID, &p.OrganizationUUID, &p.ProjectUUID, &p.ID, &p.Name, &p.Description, &p.CreatedBy, &p.Version, &p.Context, &p.VHost, &p.Provider,
-			&openAPISpec, &policiesJSON, &securityJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+			&openAPISpec, &policiesJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -716,11 +684,6 @@ func (r *LLMProxyRepo) ListByProject(orgUUID, projectUUID string, limit, offset 
 			return nil, fmt.Errorf("unmarshal policies for proxy %s: %w", p.ID, err)
 		}
 		p.Policies = policies
-		if securityJSON.Valid && securityJSON.String != "" {
-			if err := json.Unmarshal([]byte(securityJSON.String), &p.Security); err != nil {
-				return nil, fmt.Errorf("unmarshal security for proxy %s (project %s): %w", p.ID, projectUUID, err)
-			}
-		}
 		res = append(res, &p)
 	}
 	return res, rows.Err()
@@ -729,7 +692,7 @@ func (r *LLMProxyRepo) ListByProject(orgUUID, projectUUID string, limit, offset 
 func (r *LLMProxyRepo) ListByProvider(orgUUID, providerID string, limit, offset int) ([]*model.LLMProxy, error) {
 	rows, err := r.db.Query(r.db.Rebind(`
 		SELECT uuid, organization_uuid, project_uuid, handle, name, description, created_by, version, context, vhost, provider,
-				openapi_spec, policies, security, status, created_at, updated_at
+				openapi_spec, policies, status, created_at, updated_at
 		FROM llm_proxies
 		WHERE organization_uuid = ? AND provider = ?
 		ORDER BY created_at DESC
@@ -743,10 +706,10 @@ func (r *LLMProxyRepo) ListByProvider(orgUUID, providerID string, limit, offset 
 	var res []*model.LLMProxy
 	for rows.Next() {
 		var p model.LLMProxy
-		var openAPISpec, policiesJSON, securityJSON sql.NullString
+		var openAPISpec, policiesJSON sql.NullString
 		err := rows.Scan(
 			&p.UUID, &p.OrganizationUUID, &p.ProjectUUID, &p.ID, &p.Name, &p.Description, &p.CreatedBy, &p.Version, &p.Context, &p.VHost, &p.Provider,
-			&openAPISpec, &policiesJSON, &securityJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
+			&openAPISpec, &policiesJSON, &p.Status, &p.CreatedAt, &p.UpdatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -759,11 +722,6 @@ func (r *LLMProxyRepo) ListByProvider(orgUUID, providerID string, limit, offset 
 			return nil, fmt.Errorf("unmarshal policies for proxy %s: %w", p.ID, err)
 		}
 		p.Policies = policies
-		if securityJSON.Valid && securityJSON.String != "" {
-			if err := json.Unmarshal([]byte(securityJSON.String), &p.Security); err != nil {
-				return nil, fmt.Errorf("unmarshal security for proxy %s (provider %s): %w", p.ID, providerID, err)
-			}
-		}
 		res = append(res, &p)
 	}
 	return res, rows.Err()
@@ -800,15 +758,11 @@ func (r *LLMProxyRepo) Update(p *model.LLMProxy) error {
 	if err != nil {
 		return err
 	}
-	securityJSON, err := json.Marshal(p.Security)
-	if err != nil {
-		return err
-	}
 
 	query := `
 		UPDATE llm_proxies
 		SET name = ?, description = ?, version = ?, context = ?, vhost = ?, provider = ?,
-			openapi_spec = ?, policies = ?, security = ?, status = ?, updated_at = ?
+			openapi_spec = ?, policies = ?, status = ?, updated_at = ?
 		WHERE handle = ? AND organization_uuid = ?
 	`
 	tx, err := r.db.Begin()
@@ -819,7 +773,7 @@ func (r *LLMProxyRepo) Update(p *model.LLMProxy) error {
 
 	result, err := tx.Exec(r.db.Rebind(query),
 		p.Name, p.Description, p.Version, p.Context, p.VHost, p.Provider,
-		p.OpenAPISpec, policiesColumn, string(securityJSON), p.Status, p.UpdatedAt,
+		p.OpenAPISpec, policiesColumn, p.Status, p.UpdatedAt,
 		p.ID, p.OrganizationUUID,
 	)
 	if err != nil {
