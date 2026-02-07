@@ -35,22 +35,11 @@ type API struct {
 	CreatedAt       time.Time        `json:"createdAt,omitempty" yaml:"createdAt,omitempty"`
 	UpdatedAt       time.Time        `json:"updatedAt,omitempty" yaml:"updatedAt,omitempty"`
 	LifeCycleStatus string           `json:"lifeCycleStatus,omitempty" yaml:"lifeCycleStatus,omitempty"`
-	Transport       []string         `json:"transport,omitempty" yaml:"transport,omitempty"`
-	BackendServices []BackendService `json:"backend-services,omitempty" yaml:"backend-services,omitempty"`
-	Policies        []Policy         `json:"policies,omitempty" yaml:"policies,omitempty"`
+	Transport []string `json:"transport,omitempty" yaml:"transport,omitempty"`
+	Policies  []Policy `json:"policies,omitempty" yaml:"policies,omitempty"`
 	Operations      []Operation      `json:"operations,omitempty" yaml:"operations,omitempty"`
 	Channels        []Channel        `json:"channels,omitempty" yaml:"channels,omitempty"`
 	Upstream        *UpstreamConfig  `json:"upstream,omitempty" yaml:"upstream,omitempty"`
-}
-
-// MTLSConfig represents mutual TLS configuration
-type MTLSConfig struct {
-	Enabled                    bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	EnforceIfClientCertPresent bool   `json:"enforceIfClientCertPresent,omitempty" yaml:"enforceIfClientCertPresent,omitempty"`
-	VerifyClient               bool   `json:"verifyClient,omitempty" yaml:"verifyClient,omitempty"`
-	ClientCert                 string `json:"clientCert,omitempty" yaml:"clientCert,omitempty"`
-	ClientKey                  string `json:"clientKey,omitempty" yaml:"clientKey,omitempty"`
-	CACert                     string `json:"caCert,omitempty" yaml:"caCert,omitempty"`
 }
 
 // Operation represents an API operation
@@ -69,26 +58,18 @@ type Channel struct {
 
 // OperationRequest represents operation request details
 type OperationRequest struct {
-	Method          string                `json:"method" yaml:"method" binding:"required"`
-	Path            string                `json:"path" yaml:"path" binding:"required"`
-	BackendServices []BackendRouting      `json:"backend-services,omitempty" yaml:"backend-services,omitempty"`
-	Authentication  *AuthenticationConfig `json:"authentication,omitempty" yaml:"authentication,omitempty"`
-	Policies        []Policy              `json:"policies,omitempty" yaml:"policies,omitempty"`
+	Method         string                `json:"method" yaml:"method" binding:"required"`
+	Path           string                `json:"path" yaml:"path" binding:"required"`
+	Authentication *AuthenticationConfig `json:"authentication,omitempty" yaml:"authentication,omitempty"`
+	Policies       []Policy              `json:"policies,omitempty" yaml:"policies,omitempty"`
 }
 
 // ChannelRequest represents channel request details
 type ChannelRequest struct {
-	Method          string                `json:"method" yaml:"method" binding:"required"`
-	Name            string                `json:"name" yaml:"name" binding:"required"`
-	BackendServices []BackendRouting      `json:"backend-services,omitempty" yaml:"backend-services,omitempty"`
-	Authentication  *AuthenticationConfig `json:"authentication,omitempty" yaml:"authentication,omitempty"`
-	Policies        []Policy              `json:"policies,omitempty" yaml:"policies,omitempty"`
-}
-
-// BackendRouting represents backend routing configuration
-type BackendRouting struct {
-	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
-	Weight int    `json:"weight,omitempty" yaml:"weight,omitempty"`
+	Method         string                `json:"method" yaml:"method" binding:"required"`
+	Name           string                `json:"name" yaml:"name" binding:"required"`
+	Authentication *AuthenticationConfig `json:"authentication,omitempty" yaml:"authentication,omitempty"`
+	Policies       []Policy              `json:"policies,omitempty" yaml:"policies,omitempty"`
 }
 
 // AuthenticationConfig represents authentication configuration for operations

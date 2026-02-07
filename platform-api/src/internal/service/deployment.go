@@ -39,7 +39,6 @@ import (
 type DeploymentService struct {
 	apiRepo              repository.APIRepository
 	gatewayRepo          repository.GatewayRepository
-	backendServiceRepo   repository.BackendServiceRepository
 	orgRepo              repository.OrganizationRepository
 	gatewayEventsService *GatewayEventsService
 	apiUtil              *utils.APIUtil
@@ -50,7 +49,6 @@ type DeploymentService struct {
 func NewDeploymentService(
 	apiRepo repository.APIRepository,
 	gatewayRepo repository.GatewayRepository,
-	backendServiceRepo repository.BackendServiceRepository,
 	orgRepo repository.OrganizationRepository,
 	gatewayEventsService *GatewayEventsService,
 	apiUtil *utils.APIUtil,
@@ -59,7 +57,6 @@ func NewDeploymentService(
 	return &DeploymentService{
 		apiRepo:              apiRepo,
 		gatewayRepo:          gatewayRepo,
-		backendServiceRepo:   backendServiceRepo,
 		orgRepo:              orgRepo,
 		gatewayEventsService: gatewayEventsService,
 		apiUtil:              apiUtil,
@@ -98,15 +95,6 @@ func (s *DeploymentService) DeployAPI(apiUUID string, req *dto.DeployAPIRequest,
 	// Validate deployment name is provided
 	if req.Name == "" {
 		return nil, constants.ErrDeploymentNameRequired
-	}
-
-	// Validate API has backend services attached (do this early before deployment limits)
-	backendServices, err := s.backendServiceRepo.GetBackendServicesByAPIID(apiUUID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get backend services: %w", err)
-	}
-	if len(backendServices) == 0 {
-		return nil, constants.ErrAPINoBackendServices
 	}
 
 	var baseDeploymentID *string

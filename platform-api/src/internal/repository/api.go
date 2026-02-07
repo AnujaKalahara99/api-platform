@@ -33,17 +33,15 @@ import (
 
 // APIRepo implements APIRepository
 type APIRepo struct {
-	db                 *database.DB
-	backendServiceRepo BackendServiceRepository
-	artifactRepo       ArtifactRepository
+	db           *database.DB
+	artifactRepo ArtifactRepository
 }
 
 // NewAPIRepo creates a new API repository
 func NewAPIRepo(db *database.DB) APIRepository {
 	return &APIRepo{
-		db:                 db,
-		backendServiceRepo: NewBackendServiceRepo(db),
-		artifactRepo:       NewArtifactRepo(db),
+		db:           db,
+		artifactRepo: NewArtifactRepo(db),
 	}
 }
 
@@ -485,17 +483,6 @@ func (r *APIRepo) CheckAPIExistsByHandleInOrganization(handle, orgUUID string) (
 // Helper methods for loading configurations
 
 func (r *APIRepo) loadAPIConfigurations(api *model.API) error {
-	// Load Backend Services associated with this API
-	if backendServices, err := r.backendServiceRepo.GetBackendServicesByAPIID(api.ID); err != nil {
-		return err
-	} else if backendServices != nil {
-		// Convert from []*model.BackendService to []model.BackendService
-		api.BackendServices = make([]model.BackendService, len(backendServices))
-		for i, bs := range backendServices {
-			api.BackendServices[i] = *bs
-		}
-	}
-
 	// Load Operations
 	if operations, err := r.loadOperations(api.ID); err != nil {
 		return err
@@ -561,28 +548,6 @@ func (r *APIRepo) insertOperation(tx *sql.Tx, apiId string, organizationId strin
 			return err
 		}
 		operationID = lastID
-	}
-
-	// Insert backend services routing
-	for _, backendRouting := range operation.Request.BackendServices {
-		// Look up backend service UUID by name and organization ID
-		var backendServiceUUID string
-		lookupQuery := `SELECT uuid FROM backend_services WHERE name = ? AND organization_uuid = ?`
-		err = tx.QueryRow(r.db.Rebind(lookupQuery), backendRouting.Name, organizationId).Scan(&backendServiceUUID)
-		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("backend service with name '%s' not found in organization", backendRouting.Name)
-			}
-			return fmt.Errorf("failed to lookup backend service UUID: %w", err)
-		}
-
-		bsQuery := `
-			INSERT INTO operation_backend_services (operation_id, backend_service_uuid, weight)
-			VALUES (?, ?, ?)
-		`
-		if _, err = tx.Exec(r.db.Rebind(bsQuery), operationID, backendServiceUUID, backendRouting.Weight); err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -720,13 +685,6 @@ func (r *APIRepo) loadOperations(apiId string) ([]model.Operation, error) {
 			operation.Request.Authentication = auth
 		}
 
-		// Load backend services routing
-		if backendServices, err := r.loadOperationBackendServices(operationID); err != nil {
-			return nil, err
-		} else {
-			operation.Request.BackendServices = backendServices
-		}
-
 		policies, err := deserializePolicies(policiesJSON)
 		if err != nil {
 			return nil, err
@@ -739,32 +697,6 @@ func (r *APIRepo) loadOperations(apiId string) ([]model.Operation, error) {
 	}
 
 	return operations, rows.Err()
-}
-
-func (r *APIRepo) loadOperationBackendServices(operationID int64) ([]model.BackendRouting, error) {
-	query := `
-		SELECT bs.name, obs.weight
-		FROM operation_backend_services obs
-		JOIN backend_services bs ON bs.uuid = obs.backend_service_uuid
-		WHERE obs.operation_id = ?
-	`
-	rows, err := r.db.Query(r.db.Rebind(query), operationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var backendServices []model.BackendRouting
-	for rows.Next() {
-		bs := model.BackendRouting{}
-		err := rows.Scan(&bs.Name, &bs.Weight)
-		if err != nil {
-			return nil, err
-		}
-		backendServices = append(backendServices, bs)
-	}
-
-	return backendServices, rows.Err()
 }
 
 func serializePolicies(policies []model.Policy) (any, error) {
@@ -818,9 +750,7 @@ func deserializeAPIConfigurations(configJSON sql.NullString) (*model.RestAPIConf
 func (r *APIRepo) deleteAPIConfigurations(tx *sql.Tx, apiId string) error {
 	// Delete in reverse order of dependencies
 	queries := []string{
-		`DELETE FROM operation_backend_services WHERE operation_id IN (SELECT id FROM api_operations WHERE api_uuid = ?)`,
 		`DELETE FROM api_operations WHERE api_uuid = ?`,
-		`DELETE FROM api_backend_services WHERE api_uuid = ?`, // Remove API-backend service associations
 	}
 
 	for _, query := range queries {

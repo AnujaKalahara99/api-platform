@@ -32,27 +32,25 @@ import (
 
 // GatewayInternalAPIService handles internal gateway API operations
 type GatewayInternalAPIService struct {
-	apiRepo         repository.APIRepository
-	gatewayRepo     repository.GatewayRepository
-	orgRepo         repository.OrganizationRepository
-	projectRepo     repository.ProjectRepository
-	upstreamService *UpstreamService
-	apiUtil         *utils.APIUtil
-	cfg             *config.Server
+	apiRepo     repository.APIRepository
+	gatewayRepo repository.GatewayRepository
+	orgRepo     repository.OrganizationRepository
+	projectRepo repository.ProjectRepository
+	apiUtil     *utils.APIUtil
+	cfg         *config.Server
 }
 
 // NewGatewayInternalAPIService creates a new gateway internal API service
 func NewGatewayInternalAPIService(apiRepo repository.APIRepository, gatewayRepo repository.GatewayRepository,
 	orgRepo repository.OrganizationRepository, projectRepo repository.ProjectRepository,
-	upstreamSvc *UpstreamService, cfg *config.Server) *GatewayInternalAPIService {
+	cfg *config.Server) *GatewayInternalAPIService {
 	return &GatewayInternalAPIService{
-		apiRepo:         apiRepo,
-		gatewayRepo:     gatewayRepo,
-		orgRepo:         orgRepo,
-		projectRepo:     projectRepo,
-		upstreamService: upstreamSvc,
-		apiUtil:         &utils.APIUtil{},
-		cfg:             cfg,
+		apiRepo:     apiRepo,
+		gatewayRepo: gatewayRepo,
+		orgRepo:     orgRepo,
+		projectRepo: projectRepo,
+		apiUtil:     &utils.APIUtil{},
+		cfg:         cfg,
 	}
 }
 
@@ -164,16 +162,6 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 	apiUUID := ""
 	now := time.Now()
 	if existingAPIMetadata == nil {
-		// Create backend services from upstream configurations
-		var backendServiceUUIDs []string
-		for _, upstream := range notification.Configuration.Spec.Upstreams {
-			backendServiceUUID, err := s.upstreamService.CreateBackendServiceFromUpstream(upstream, orgID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create backend service from upstream: %w", err)
-			}
-			backendServiceUUIDs = append(backendServiceUUIDs, backendServiceUUID)
-		}
-
 		// Convert operations from notification to API operations
 		operations := make([]model.Operation, 0, len(notification.Configuration.Spec.Operations))
 		for _, op := range notification.Configuration.Spec.Operations {
@@ -188,8 +176,7 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 			operations = append(operations, operation)
 		}
 
-		// Create new API from notification (without backend services in the model)
-
+		// Create new API from notification
 		newAPI := &model.API{
 			Handle:          apiHandle, // Use provided apiID as handle
 			Name:            notification.Configuration.Spec.Name,
@@ -213,14 +200,6 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 
 		// CreateAPI sets the UUID on the model
 		apiUUID = newAPI.ID
-
-		// Associate backend services with the API
-		for i, backendServiceUUID := range backendServiceUUIDs {
-			isDefault := i == 0 // First backend service is default
-			if err := s.upstreamService.AssociateBackendServiceWithAPI(apiUUID, backendServiceUUID, isDefault); err != nil {
-				return nil, fmt.Errorf("failed to associate backend service with API: %w", err)
-			}
-		}
 
 		apiCreated = true
 	} else {

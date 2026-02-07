@@ -60,7 +60,6 @@ func (u *APIUtil) DTOToModel(dto *dto.API) *model.API {
 		OrganizationID:  dto.OrganizationID,
 		LifeCycleStatus: dto.LifeCycleStatus,
 		Transport:       dto.Transport,
-		BackendServices: u.BackendServicesDTOToModel(dto.BackendServices),
 		Policies:        u.PoliciesDTOToModel(dto.Policies),
 		Operations:      u.OperationsDTOToModel(dto.Operations),
 		Channels:        u.ChannelsDTOToModel(dto.Channels),
@@ -91,7 +90,6 @@ func (u *APIUtil) ModelToDTO(model *model.API) *dto.API {
 		UpdatedAt:       model.UpdatedAt,
 		LifeCycleStatus: model.LifeCycleStatus,
 		Transport:       model.Transport,
-		BackendServices: u.BackendServicesModelToDTO(model.BackendServices),
 		Policies:        u.PoliciesModelToDTO(model.Configuration.Policies),
 		Operations:      u.OperationsModelToDTO(model.Configuration.Operations),
 		Channels:        u.ChannelsModelToDTO(model.Channels),
@@ -100,116 +98,6 @@ func (u *APIUtil) ModelToDTO(model *model.API) *dto.API {
 }
 
 // Helper DTO to Model conversion methods
-
-func (u *APIUtil) MTLSDTOToModel(dto *dto.MTLSConfig) *model.MTLSConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.MTLSConfig{
-		Enabled:                    dto.Enabled,
-		EnforceIfClientCertPresent: dto.EnforceIfClientCertPresent,
-		VerifyClient:               dto.VerifyClient,
-		ClientCert:                 dto.ClientCert,
-		ClientKey:                  dto.ClientKey,
-		CACert:                     dto.CACert,
-	}
-}
-
-func (u *APIUtil) BackendServicesDTOToModel(dtos []dto.BackendService) []model.BackendService {
-	if dtos == nil {
-		return nil
-	}
-	backendServiceModels := make([]model.BackendService, 0)
-	for _, backendServiceDTO := range dtos {
-		backendServiceModels = append(backendServiceModels, *u.BackendServiceDTOToModel(&backendServiceDTO))
-	}
-	return backendServiceModels
-}
-
-func (u *APIUtil) BackendServiceDTOToModel(dto *dto.BackendService) *model.BackendService {
-	if dto == nil {
-		return nil
-	}
-	return &model.BackendService{
-		Name:           dto.Name,
-		Endpoints:      u.BackendEndpointsDTOToModel(dto.Endpoints),
-		Timeout:        u.TimeoutDTOToModel(dto.Timeout),
-		Retries:        dto.Retries,
-		LoadBalance:    u.LoadBalanceDTOToModel(dto.LoadBalance),
-		CircuitBreaker: u.CircuitBreakerDTOToModel(dto.CircuitBreaker),
-	}
-}
-
-func (u *APIUtil) BackendEndpointsDTOToModel(dtos []dto.BackendEndpoint) []model.BackendEndpoint {
-	if dtos == nil {
-		return nil
-	}
-	backendEndpointModels := make([]model.BackendEndpoint, 0)
-	for _, backendEndpointDTO := range dtos {
-		backendEndpointModels = append(backendEndpointModels, *u.BackendEndpointDTOToModel(&backendEndpointDTO))
-	}
-	return backendEndpointModels
-}
-
-func (u *APIUtil) BackendEndpointDTOToModel(dto *dto.BackendEndpoint) *model.BackendEndpoint {
-	if dto == nil {
-		return nil
-	}
-	return &model.BackendEndpoint{
-		URL:         dto.URL,
-		Description: dto.Description,
-		HealthCheck: u.HealthCheckDTOToModel(dto.HealthCheck),
-		Weight:      dto.Weight,
-		MTLS:        u.MTLSDTOToModel(dto.MTLS),
-	}
-}
-
-func (u *APIUtil) HealthCheckDTOToModel(dto *dto.HealthCheckConfig) *model.HealthCheckConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.HealthCheckConfig{
-		Enabled:            dto.Enabled,
-		Interval:           dto.Interval,
-		Timeout:            dto.Timeout,
-		UnhealthyThreshold: dto.UnhealthyThreshold,
-		HealthyThreshold:   dto.HealthyThreshold,
-	}
-}
-
-func (u *APIUtil) TimeoutDTOToModel(dto *dto.TimeoutConfig) *model.TimeoutConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.TimeoutConfig{
-		Connect: dto.Connect,
-		Read:    dto.Read,
-		Write:   dto.Write,
-	}
-}
-
-func (u *APIUtil) LoadBalanceDTOToModel(dto *dto.LoadBalanceConfig) *model.LoadBalanceConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.LoadBalanceConfig{
-		Algorithm: dto.Algorithm,
-		Failover:  dto.Failover,
-	}
-}
-
-func (u *APIUtil) CircuitBreakerDTOToModel(dto *dto.CircuitBreakerConfig) *model.CircuitBreakerConfig {
-	if dto == nil {
-		return nil
-	}
-	return &model.CircuitBreakerConfig{
-		Enabled:            dto.Enabled,
-		MaxConnections:     dto.MaxConnections,
-		MaxPendingRequests: dto.MaxPendingRequests,
-		MaxRequests:        dto.MaxRequests,
-		MaxRetries:         dto.MaxRetries,
-	}
-}
 
 func (u *APIUtil) OperationsDTOToModel(dtos []dto.Operation) []model.Operation {
 	if dtos == nil {
@@ -260,11 +148,10 @@ func (u *APIUtil) OperationRequestDTOToModel(dto *dto.OperationRequest) *model.O
 		return nil
 	}
 	return &model.OperationRequest{
-		Method:          dto.Method,
-		Path:            dto.Path,
-		BackendServices: u.BackendRoutingDTOsToModel(dto.BackendServices),
-		Authentication:  u.AuthConfigDTOToModel(dto.Authentication),
-		Policies:        u.PoliciesDTOToModel(dto.Policies),
+		Method:         dto.Method,
+		Path:           dto.Path,
+		Authentication: u.AuthConfigDTOToModel(dto.Authentication),
+		Policies:       u.PoliciesDTOToModel(dto.Policies),
 	}
 }
 
@@ -273,32 +160,10 @@ func (u *APIUtil) ChannelRequestDTOToModel(dto *dto.ChannelRequest) *model.Chann
 		return nil
 	}
 	return &model.ChannelRequest{
-		Method:          dto.Method,
-		Name:            dto.Name,
-		BackendServices: u.BackendRoutingDTOsToModel(dto.BackendServices),
-		Authentication:  u.AuthConfigDTOToModel(dto.Authentication),
-		Policies:        u.PoliciesDTOToModel(dto.Policies),
-	}
-}
-
-func (u *APIUtil) BackendRoutingDTOsToModel(dtos []dto.BackendRouting) []model.BackendRouting {
-	if dtos == nil {
-		return nil
-	}
-	backendRoutingModels := make([]model.BackendRouting, 0)
-	for _, operationsDTO := range dtos {
-		backendRoutingModels = append(backendRoutingModels, *u.BackendRoutingDTOToModel(&operationsDTO))
-	}
-	return backendRoutingModels
-}
-
-func (u *APIUtil) BackendRoutingDTOToModel(dto *dto.BackendRouting) *model.BackendRouting {
-	if dto == nil {
-		return nil
-	}
-	return &model.BackendRouting{
-		Name:   dto.Name,
-		Weight: dto.Weight,
+		Method:         dto.Method,
+		Name:           dto.Name,
+		Authentication: u.AuthConfigDTOToModel(dto.Authentication),
+		Policies:       u.PoliciesDTOToModel(dto.Policies),
 	}
 }
 
@@ -336,116 +201,6 @@ func (u *APIUtil) PolicyDTOToModel(dto *dto.Policy) *model.Policy {
 }
 
 // Helper Model to DTO conversion methods
-
-func (u *APIUtil) MTLSModelToDTO(model *model.MTLSConfig) *dto.MTLSConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.MTLSConfig{
-		Enabled:                    model.Enabled,
-		EnforceIfClientCertPresent: model.EnforceIfClientCertPresent,
-		VerifyClient:               model.VerifyClient,
-		ClientCert:                 model.ClientCert,
-		ClientKey:                  model.ClientKey,
-		CACert:                     model.CACert,
-	}
-}
-
-func (u *APIUtil) BackendServicesModelToDTO(models []model.BackendService) []dto.BackendService {
-	if models == nil {
-		return nil
-	}
-	backendServiceDTOs := make([]dto.BackendService, 0)
-	for _, backendServiceModel := range models {
-		backendServiceDTOs = append(backendServiceDTOs, *u.BackendServiceModelToDTO(&backendServiceModel))
-	}
-	return backendServiceDTOs
-}
-
-func (u *APIUtil) BackendServiceModelToDTO(model *model.BackendService) *dto.BackendService {
-	if model == nil {
-		return nil
-	}
-	return &dto.BackendService{
-		Name:           model.Name,
-		Endpoints:      u.BackendEndpointsModelToDTO(model.Endpoints),
-		Timeout:        u.TimeoutModelToDTO(model.Timeout),
-		Retries:        model.Retries,
-		LoadBalance:    u.LoadBalanceModelToDTO(model.LoadBalance),
-		CircuitBreaker: u.CircuitBreakerModelToDTO(model.CircuitBreaker),
-	}
-}
-
-func (u *APIUtil) BackendEndpointsModelToDTO(models []model.BackendEndpoint) []dto.BackendEndpoint {
-	if models == nil {
-		return nil
-	}
-	backendEndpointDTOs := make([]dto.BackendEndpoint, 0)
-	for _, backendServiceModel := range models {
-		backendEndpointDTOs = append(backendEndpointDTOs, *u.BackendEndpointModelToDTO(&backendServiceModel))
-	}
-	return backendEndpointDTOs
-}
-
-func (u *APIUtil) BackendEndpointModelToDTO(model *model.BackendEndpoint) *dto.BackendEndpoint {
-	if model == nil {
-		return nil
-	}
-	return &dto.BackendEndpoint{
-		URL:         model.URL,
-		Description: model.Description,
-		HealthCheck: u.HealthCheckModelToDTO(model.HealthCheck),
-		Weight:      model.Weight,
-		MTLS:        u.MTLSModelToDTO(model.MTLS),
-	}
-}
-
-func (u *APIUtil) HealthCheckModelToDTO(model *model.HealthCheckConfig) *dto.HealthCheckConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.HealthCheckConfig{
-		Enabled:            model.Enabled,
-		Interval:           model.Interval,
-		Timeout:            model.Timeout,
-		UnhealthyThreshold: model.UnhealthyThreshold,
-		HealthyThreshold:   model.HealthyThreshold,
-	}
-}
-
-func (u *APIUtil) TimeoutModelToDTO(model *model.TimeoutConfig) *dto.TimeoutConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.TimeoutConfig{
-		Connect: model.Connect,
-		Read:    model.Read,
-		Write:   model.Write,
-	}
-}
-
-func (u *APIUtil) LoadBalanceModelToDTO(model *model.LoadBalanceConfig) *dto.LoadBalanceConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.LoadBalanceConfig{
-		Algorithm: model.Algorithm,
-		Failover:  model.Failover,
-	}
-}
-
-func (u *APIUtil) CircuitBreakerModelToDTO(model *model.CircuitBreakerConfig) *dto.CircuitBreakerConfig {
-	if model == nil {
-		return nil
-	}
-	return &dto.CircuitBreakerConfig{
-		Enabled:            model.Enabled,
-		MaxConnections:     model.MaxConnections,
-		MaxPendingRequests: model.MaxPendingRequests,
-		MaxRequests:        model.MaxRequests,
-		MaxRetries:         model.MaxRetries,
-	}
-}
 
 func (u *APIUtil) OperationsModelToDTO(models []model.Operation) []dto.Operation {
 	if models == nil {
@@ -496,11 +251,10 @@ func (u *APIUtil) ChannelRequestModelToDTO(model *model.ChannelRequest) *dto.Cha
 		return nil
 	}
 	return &dto.ChannelRequest{
-		Method:          model.Method,
-		Name:            model.Name,
-		BackendServices: u.BackendRoutingModelsToDTO(model.BackendServices),
-		Authentication:  u.AuthConfigModelToDTO(model.Authentication),
-		Policies:        u.PoliciesModelToDTO(model.Policies),
+		Method:         model.Method,
+		Name:           model.Name,
+		Authentication: u.AuthConfigModelToDTO(model.Authentication),
+		Policies:       u.PoliciesModelToDTO(model.Policies),
 	}
 }
 
@@ -509,32 +263,10 @@ func (u *APIUtil) OperationRequestModelToDTO(model *model.OperationRequest) *dto
 		return nil
 	}
 	return &dto.OperationRequest{
-		Method:          model.Method,
-		Path:            model.Path,
-		BackendServices: u.BackendRoutingModelsToDTO(model.BackendServices),
-		Authentication:  u.AuthConfigModelToDTO(model.Authentication),
-		Policies:        u.PoliciesModelToDTO(model.Policies),
-	}
-}
-
-func (u *APIUtil) BackendRoutingModelsToDTO(models []model.BackendRouting) []dto.BackendRouting {
-	if models == nil {
-		return nil
-	}
-	backendRoutingDTOs := make([]dto.BackendRouting, 0)
-	for _, backendRoutingModel := range models {
-		backendRoutingDTOs = append(backendRoutingDTOs, *u.BackendRoutingModelToDTO(&backendRoutingModel))
-	}
-	return backendRoutingDTOs
-}
-
-func (u *APIUtil) BackendRoutingModelToDTO(model *model.BackendRouting) *dto.BackendRouting {
-	if model == nil {
-		return nil
-	}
-	return &dto.BackendRouting{
-		Name:   model.Name,
-		Weight: model.Weight,
+		Method:         model.Method,
+		Path:           model.Path,
+		Authentication: u.AuthConfigModelToDTO(model.Authentication),
+		Policies:       u.PoliciesModelToDTO(model.Policies),
 	}
 }
 
@@ -684,21 +416,27 @@ func (u *APIUtil) GenerateAPIDeploymentYAML(api *dto.API) (string, error) {
 		channelList = append(channelList, *ch.Request)
 	}
 
-	// Get the main upstream URL from the first backend service endpoint
+	// Convert upstream config to YAML format
 	var upstreamYAML *dto.UpstreamYAML
-	for _, backendService := range api.BackendServices {
-		for _, endpoint := range backendService.Endpoints {
-			if endpoint.URL != "" {
-				upstreamYAML = &dto.UpstreamYAML{
-					Main: &dto.UpstreamTarget{
-						URL: endpoint.URL,
-					},
-				}
-				break
+	if api.Upstream != nil {
+		upstreamYAML = &dto.UpstreamYAML{}
+		if api.Upstream.Main != nil {
+			upstreamYAML.Main = &dto.UpstreamTarget{}
+			if api.Upstream.Main.URL != "" {
+				upstreamYAML.Main.URL = api.Upstream.Main.URL
+			}
+			if api.Upstream.Main.Ref != "" {
+				upstreamYAML.Main.Ref = api.Upstream.Main.Ref
 			}
 		}
-		if upstreamYAML != nil {
-			break
+		if api.Upstream.Sandbox != nil {
+			upstreamYAML.Sandbox = &dto.UpstreamTarget{}
+			if api.Upstream.Sandbox.URL != "" {
+				upstreamYAML.Sandbox.URL = api.Upstream.Sandbox.URL
+			}
+			if api.Upstream.Sandbox.Ref != "" {
+				upstreamYAML.Sandbox.Ref = api.Upstream.Sandbox.Ref
+			}
 		}
 	}
 
@@ -938,21 +676,6 @@ func (u *APIUtil) APIYAMLDataToDTO(yamlData *dto.APIYAMLData) *dto.API {
 		return nil
 	}
 
-	// Convert upstream to backend services if present
-	var backendServices []dto.BackendService
-	if yamlData.Upstream != nil && yamlData.Upstream.Main != nil && yamlData.Upstream.Main.URL != "" {
-		backendServices = []dto.BackendService{
-			{
-				IsDefault: true,
-				Endpoints: []dto.BackendEndpoint{
-					{
-						URL: yamlData.Upstream.Main.URL,
-					},
-				},
-			},
-		}
-	}
-
 	// Convert operations if present
 	var operations []dto.Operation
 	if len(yamlData.Operations) > 0 {
@@ -962,11 +685,10 @@ func (u *APIUtil) APIYAMLDataToDTO(yamlData *dto.APIYAMLData) *dto.API {
 				Name:        fmt.Sprintf("Operation-%d", i+1),
 				Description: fmt.Sprintf("Operation for %s %s", op.Method, op.Path),
 				Request: &dto.OperationRequest{
-					Method:          op.Method,
-					Path:            op.Path,
-					BackendServices: op.BackendServices,
-					Authentication:  op.Authentication,
-					Policies:        op.Policies,
+					Method:         op.Method,
+					Path:           op.Path,
+					Authentication: op.Authentication,
+					Policies:       op.Policies,
 				},
 			}
 		}
@@ -992,13 +714,12 @@ func (u *APIUtil) APIYAMLDataToDTO(yamlData *dto.APIYAMLData) *dto.API {
 
 	// Create and populate API DTO with available fields
 	api := &dto.API{
-		Name:            yamlData.DisplayName,
-		Context:         yamlData.Context,
-		Version:         yamlData.Version,
-		BackendServices: backendServices,
-		Operations:      operations,
-		Policies:        yamlData.Policies,
-		Upstream:        upstream,
+		Name:       yamlData.DisplayName,
+		Context:    yamlData.Context,
+		Version:    yamlData.Version,
+		Operations: operations,
+		Policies:   yamlData.Policies,
+		Upstream:   upstream,
 
 		// Set reasonable defaults for required fields that aren't in APIYAMLData
 		LifeCycleStatus: "CREATED",
@@ -1274,25 +995,15 @@ func (u *APIUtil) parseOpenAPI3Document(document libopenapi.Document) (*dto.API,
 	operations := u.extractOperationsFromV3Paths(doc.Paths)
 	api.Operations = operations
 
-	// Extract backend services from servers
-	var backendServices []dto.BackendService
-	if doc.Servers != nil {
-		for _, server := range doc.Servers {
-			service := dto.BackendService{
-				Name:        server.Name,
-				Description: server.Description,
-				Endpoints: []dto.BackendEndpoint{
-					{
-						URL:    server.URL,
-						Weight: 100,
-					},
-				},
-			}
-			backendServices = append(backendServices, service)
+	// Extract upstream from servers
+	if doc.Servers != nil && len(doc.Servers) > 0 {
+		// Use the first server as the main upstream
+		api.Upstream = &dto.UpstreamConfig{
+			Main: &dto.UpstreamEndpoint{
+				URL: doc.Servers[0].URL,
+			},
 		}
 	}
-
-	api.BackendServices = backendServices
 
 	return api, nil
 }
@@ -1327,10 +1038,8 @@ func (u *APIUtil) parseSwagger2Document(document libopenapi.Document) (*dto.API,
 	operations := u.extractOperationsFromV2Paths(doc.Paths)
 	api.Operations = operations
 
-	// Convert Swagger 2.0 host/basePath/schemes to backend services
-	backendServices := u.convertSwagger2ToBackendServices(doc.Host, doc.BasePath, doc.Schemes)
-
-	api.BackendServices = backendServices
+	// Convert Swagger 2.0 host/basePath/schemes to upstream
+	api.Upstream = u.convertSwagger2ToUpstream(doc.Host, doc.BasePath, doc.Schemes)
 
 	return api, nil
 }
@@ -1467,12 +1176,10 @@ func (u *APIUtil) extractOperationsFromV2Paths(paths *v2high.Paths) []dto.Operat
 	return operations
 }
 
-// convertSwagger2ToBackendServices converts Swagger 2.0 host/basePath/schemes to backend services
-func (u *APIUtil) convertSwagger2ToBackendServices(host, basePath string, schemes []string) []dto.BackendService {
-	var backendServices []dto.BackendService
-
+// convertSwagger2ToUpstream converts Swagger 2.0 host/basePath/schemes to upstream config
+func (u *APIUtil) convertSwagger2ToUpstream(host, basePath string, schemes []string) *dto.UpstreamConfig {
 	if host == "" {
-		return backendServices // No host specified, cannot create backend services
+		return nil // No host specified, cannot create upstream
 	}
 
 	if len(schemes) == 0 {
@@ -1483,21 +1190,13 @@ func (u *APIUtil) convertSwagger2ToBackendServices(host, basePath string, scheme
 		basePath = "/"
 	}
 
-	// Create backend services for each scheme
-	for _, scheme := range schemes {
-		url := fmt.Sprintf("%s://%s%s", scheme, host, basePath)
-		service := dto.BackendService{
-			Endpoints: []dto.BackendEndpoint{
-				{
-					URL:    url,
-					Weight: 100,
-				},
-			},
-		}
-		backendServices = append(backendServices, service)
+	// Create upstream config using the first scheme
+	url := fmt.Sprintf("%s://%s%s", schemes[0], host, basePath)
+	return &dto.UpstreamConfig{
+		Main: &dto.UpstreamEndpoint{
+			URL: url,
+		},
 	}
-
-	return backendServices
 }
 
 // ValidateAndParseOpenAPI validates and parses OpenAPI definition content
@@ -1566,10 +1265,11 @@ func (u *APIUtil) MergeAPIDetails(userAPI *dto.API, extractedAPI *dto.API) *dto.
 		merged.LifeCycleStatus = extractedAPI.LifeCycleStatus
 	}
 
-	if len(userAPI.BackendServices) > 0 {
-		merged.BackendServices = userAPI.BackendServices
+	// Merge upstream configuration
+	if userAPI.Upstream != nil {
+		merged.Upstream = userAPI.Upstream
 	} else {
-		merged.BackendServices = extractedAPI.BackendServices
+		merged.Upstream = extractedAPI.Upstream
 	}
 
 	// Use extracted operations from OpenAPI

@@ -692,13 +692,11 @@ func TestGenerateAPIDeploymentYAMLIncludesPolicies(t *testing.T) {
 		Version:   "v1",
 		Context:   "/pets",
 		ProjectID: "project-123",
-		Kind:      constants.RestApi,
-		Policies:  policies,
-		BackendServices: []dto.BackendService{
-			{
-				Endpoints: []dto.BackendEndpoint{
-					{URL: "https://backend.example.com"},
-				},
+		Kind:       constants.RestApi,
+		Policies:   policies,
+		Upstream: &dto.UpstreamConfig{
+			Main: &dto.UpstreamEndpoint{
+				URL: "https://backend.example.com",
 			},
 		},
 		Operations: []dto.Operation{

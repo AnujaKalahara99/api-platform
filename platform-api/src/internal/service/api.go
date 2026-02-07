@@ -44,8 +44,6 @@ type APIService struct {
 	gatewayRepo          repository.GatewayRepository
 	devPortalRepo        repository.DevPortalRepository
 	publicationRepo      repository.APIPublicationRepository
-	backendServiceRepo   repository.BackendServiceRepository
-	upstreamService      *UpstreamService
 	gatewayEventsService *GatewayEventsService
 	devPortalService     *DevPortalService
 	apiUtil              *utils.APIUtil
@@ -55,7 +53,6 @@ type APIService struct {
 func NewAPIService(apiRepo repository.APIRepository, projectRepo repository.ProjectRepository,
 	orgRepo repository.OrganizationRepository, gatewayRepo repository.GatewayRepository,
 	devPortalRepo repository.DevPortalRepository, publicationRepo repository.APIPublicationRepository,
-	backendServiceRepo repository.BackendServiceRepository, upstreamSvc *UpstreamService,
 	gatewayEventsService *GatewayEventsService, devPortalService *DevPortalService, apiUtil *utils.APIUtil) *APIService {
 	return &APIService{
 		apiRepo:              apiRepo,
@@ -64,8 +61,6 @@ func NewAPIService(apiRepo repository.APIRepository, projectRepo repository.Proj
 		gatewayRepo:          gatewayRepo,
 		devPortalRepo:        devPortalRepo,
 		publicationRepo:      publicationRepo,
-		backendServiceRepo:   backendServiceRepo,
-		upstreamService:      upstreamSvc,
 		gatewayEventsService: gatewayEventsService,
 		devPortalService:     devPortalService,
 		apiUtil:              apiUtil,
@@ -144,22 +139,9 @@ func (s *APIService) CreateAPI(req *CreateAPIRequest, orgUUID string) (*dto.API,
 		LifeCycleStatus: req.LifeCycleStatus,
 		Kind:            constants.RestApi,
 		Transport:       req.Transport,
-		BackendServices: req.BackendServices,
 		Operations:      req.Operations,
 		Channels:        req.Channels,
 	}
-
-	// Process backend services: check if they exist, create or update them
-	var backendServiceIdList []string
-	for _, backendService := range req.BackendServices {
-		backendServiceId, err := s.upstreamService.UpsertBackendService(&backendService, orgUUID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to process backend service '%s': %w", backendService.Name, err)
-		}
-		backendServiceIdList = append(backendServiceIdList, backendServiceId)
-	}
-
-	fmt.Println("Backend Services Created")
 
 	apiModel := s.apiUtil.DTOToModel(api)
 	fmt.Println("Got API Model")
@@ -175,21 +157,6 @@ func (s *APIService) CreateAPI(req *CreateAPIRequest, orgUUID string) (*dto.API,
 
 	api.CreatedAt = apiModel.CreatedAt
 	api.UpdatedAt = apiModel.UpdatedAt
-
-	// Associate backend services with the API (use internal UUID)
-	for i, backendServiceUUID := range backendServiceIdList {
-		isDefault := i == 0 // First backend service is default
-		if len(req.BackendServices) > 0 && i < len(req.BackendServices) {
-			// Check if isDefault was explicitly set in the request
-			isDefault = req.BackendServices[i].IsDefault
-		}
-
-		if err := s.upstreamService.AssociateBackendServiceWithAPI(apiUUID, backendServiceUUID, isDefault); err != nil {
-			return nil, fmt.Errorf("failed to associate backend service with API: %w", err)
-		}
-	}
-
-	fmt.Println("Associated Backends")
 
 	// Automatically create DevPortal association for default DevPortal (use internal UUID)
 	if err := s.createDefaultDevPortalAssociation(apiUUID, orgUUID); err != nil {
@@ -321,12 +288,6 @@ func (s *APIService) UpdateAPI(apiUUID string, req *UpdateAPIRequest, orgUUID st
 	updatedAPIModel.ID = apiUUID // Ensure UUID remains unchanged
 	if err := s.apiRepo.UpdateAPI(updatedAPIModel); err != nil {
 		return nil, err
-	}
-
-	if req.BackendServices != nil {
-		if err := s.updateAPIBackendServices(apiUUID, req.BackendServices, orgUUID); err != nil {
-			return nil, err
-		}
 	}
 
 	return existingAPI, nil
@@ -693,9 +654,6 @@ func (s *APIService) applyAPIUpdates(existingAPIModel *model.API, req *UpdateAPI
 	if req.Transport != nil {
 		existingAPI.Transport = *req.Transport
 	}
-	if req.BackendServices != nil {
-		existingAPI.BackendServices = *req.BackendServices
-	}
 	if req.Operations != nil {
 		existingAPI.Operations = *req.Operations
 	}
@@ -707,45 +665,6 @@ func (s *APIService) applyAPIUpdates(existingAPIModel *model.API, req *UpdateAPI
 	}
 
 	return existingAPI, nil
-}
-
-// updateAPIBackendServices handles backend service updates for an API
-func (s *APIService) updateAPIBackendServices(apiUUID string, backendServices *[]dto.BackendService, orgId string) error {
-	// Process backend services: check if they exist, create or update them
-	var backendServiceUUIDs []string
-	for _, backendService := range *backendServices {
-		backendServiceUUID, err := s.upstreamService.UpsertBackendService(&backendService, orgId)
-		if err != nil {
-			return fmt.Errorf("failed to process backend service '%s': %w", backendService.Name, err)
-		}
-		backendServiceUUIDs = append(backendServiceUUIDs, backendServiceUUID)
-	}
-
-	// Remove existing associations
-	existingBackendServices, err := s.upstreamService.GetBackendServicesByAPIID(apiUUID)
-	if err != nil {
-		return fmt.Errorf("failed to get existing backend services: %w", err)
-	}
-
-	for _, existingService := range existingBackendServices {
-		if err := s.upstreamService.DisassociateBackendServiceFromAPI(apiUUID, existingService.ID); err != nil {
-			return fmt.Errorf("failed to remove existing backend service association: %w", err)
-		}
-	}
-
-	// Add new associations
-	for i, backendServiceUUID := range backendServiceUUIDs {
-		isDefault := i == 0
-		if len(*backendServices) > 0 && i < len(*backendServices) {
-			isDefault = (*backendServices)[i].IsDefault
-		}
-
-		if err := s.upstreamService.AssociateBackendServiceWithAPI(apiUUID, backendServiceUUID, isDefault); err != nil {
-			return fmt.Errorf("failed to associate backend service with API: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // validateUpdateAPIRequest checks the validity of the update API request
@@ -823,24 +742,22 @@ type CreateAPIRequest struct {
 	ProjectID       string               `json:"projectId"`
 	LifeCycleStatus string               `json:"lifeCycleStatus,omitempty"`
 	Kind            string               `json:"kind,omitempty"`
-	Transport       []string             `json:"transport,omitempty"`
-	BackendServices []dto.BackendService `json:"backend-services,omitempty"`
-	Channels        []dto.Channel        `json:"channels,omitempty"`
-	Operations      []dto.Operation      `json:"operations,omitempty"`
+	Transport  []string        `json:"transport,omitempty"`
+	Channels   []dto.Channel   `json:"channels,omitempty"`
+	Operations []dto.Operation `json:"operations,omitempty"`
 }
 
 // UpdateAPIRequest represents the request to update an API
 type UpdateAPIRequest struct {
-	Name            *string               `json:"name,omitempty"`
-	Description     *string               `json:"description,omitempty"`
-	CreatedBy       *string               `json:"createdBy,omitempty"`
-	LifeCycleStatus *string               `json:"lifeCycleStatus,omitempty"`
-	Kind            *string               `json:"kind,omitempty"`
-	Transport       *[]string             `json:"transport,omitempty"`
-	BackendServices *[]dto.BackendService `json:"backend-services,omitempty"`
-	Operations      *[]dto.Operation      `json:"operations,omitempty"`
-	Channels        *[]dto.Channel        `json:"channels,omitempty"`
-	Policies        *[]dto.Policy         `json:"policies,omitempty"`
+	Name            *string          `json:"name,omitempty"`
+	Description     *string          `json:"description,omitempty"`
+	CreatedBy       *string          `json:"createdBy,omitempty"`
+	LifeCycleStatus *string          `json:"lifeCycleStatus,omitempty"`
+	Kind            *string          `json:"kind,omitempty"`
+	Transport       *[]string        `json:"transport,omitempty"`
+	Operations      *[]dto.Operation `json:"operations,omitempty"`
+	Channels        *[]dto.Channel   `json:"channels,omitempty"`
+	Policies        *[]dto.Policy    `json:"policies,omitempty"`
 }
 
 // generateDefaultOperations creates default CRUD operations for an API
@@ -996,7 +913,6 @@ func (s *APIService) ImportAPIProject(req *dto.ImportAPIProjectRequest, orgUUID 
 		ProjectID:       apiData.ProjectID,
 		LifeCycleStatus: apiData.LifeCycleStatus,
 		Transport:       apiData.Transport,
-		BackendServices: apiData.BackendServices,
 		Operations:      apiData.Operations,
 	}
 
@@ -1034,9 +950,6 @@ func (s *APIService) mergeAPIData(artifact *dto.APIYAMLData, userAPIData *dto.AP
 	}
 	if len(userAPIData.Transport) > 0 {
 		apiDTO.Transport = userAPIData.Transport
-	}
-	if userAPIData.BackendServices != nil && len(userAPIData.BackendServices) > 0 {
-		apiDTO.BackendServices = userAPIData.BackendServices
 	}
 
 	return apiDTO
@@ -1406,7 +1319,6 @@ func (s *APIService) ImportFromOpenAPI(req *dto.ImportOpenAPIRequest, orgId stri
 		ProjectID:       mergedAPI.ProjectID,
 		LifeCycleStatus: mergedAPI.LifeCycleStatus,
 		Transport:       mergedAPI.Transport,
-		BackendServices: mergedAPI.BackendServices,
 		Operations:      mergedAPI.Operations,
 	}
 

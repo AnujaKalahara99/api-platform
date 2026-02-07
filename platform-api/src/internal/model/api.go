@@ -35,13 +35,12 @@ type API struct {
 	OrganizationID  string           `json:"organizationId" db:"organization_uuid"` // FK to Organization.ID
 	CreatedAt       time.Time        `json:"createdAt,omitempty" db:"created_at"`
 	UpdatedAt       time.Time        `json:"updatedAt,omitempty" db:"updated_at"`
-	LifeCycleStatus string           `json:"lifeCycleStatus,omitempty" db:"lifecycle_status"`
-	Transport       []string         `json:"transport,omitempty" db:"transport"`
-	BackendServices []BackendService `json:"backend-services,omitempty"`
-	Policies        []Policy         `json:"policies,omitempty"`
-	Operations      []Operation      `json:"operations,omitempty"`
-	Channels        []Channel        `json:"channels,omitempty"`
-	Upstream        *UpstreamConfig  `json:"upstream,omitempty" db:"-"`
+	LifeCycleStatus string          `json:"lifeCycleStatus,omitempty" db:"lifecycle_status"`
+	Transport       []string        `json:"transport,omitempty" db:"transport"`
+	Policies        []Policy        `json:"policies,omitempty"`
+	Operations      []Operation     `json:"operations,omitempty"`
+	Channels        []Channel       `json:"channels,omitempty"`
+	Upstream        *UpstreamConfig `json:"upstream,omitempty" db:"-"`
 	Configuration   RestAPIConfig    `json:"configuration" db:"-"`
 }
 
@@ -70,78 +69,6 @@ type APIMetadata struct {
 	OrganizationID string `json:"organizationId" db:"organization_uuid"`
 }
 
-// MTLSConfig represents mutual TLS configuration
-type MTLSConfig struct {
-	Enabled                    bool   `json:"enabled,omitempty"`
-	EnforceIfClientCertPresent bool   `json:"enforceIfClientCertPresent,omitempty"`
-	VerifyClient               bool   `json:"verifyClient,omitempty"`
-	ClientCert                 string `json:"clientCert,omitempty"`
-	ClientKey                  string `json:"clientKey,omitempty"`
-	CACert                     string `json:"caCert,omitempty"`
-}
-
-// BackendService represents a backend service configuration
-type BackendService struct {
-	ID             string                `json:"id" db:"uuid"`
-	OrganizationID string                `json:"organizationId" db:"organization_uuid"`
-	Name           string                `json:"name" db:"name"`
-	Description    string                `json:"description,omitempty" db:"description"`
-	Endpoints      []BackendEndpoint     `json:"endpoints,omitempty"`
-	Timeout        *TimeoutConfig        `json:"timeout,omitempty"`
-	Retries        int                   `json:"retries,omitempty" db:"retries"`
-	LoadBalance    *LoadBalanceConfig    `json:"loadBalance,omitempty"`
-	CircuitBreaker *CircuitBreakerConfig `json:"circuitBreaker,omitempty"`
-	CreatedAt      time.Time             `json:"createdAt,omitempty" db:"created_at"`
-	UpdatedAt      time.Time             `json:"updatedAt,omitempty" db:"updated_at"`
-}
-
-// APIBackendService represents the association between an API and a backend service
-type APIBackendService struct {
-	ApiID            string `json:"apiId" db:"api_uuid"`
-	BackendServiceID string `json:"backendServiceId" db:"backend_service_uuid"`
-	IsDefault        bool   `json:"isDefault" db:"is_default"`
-}
-
-// BackendEndpoint represents a backend endpoint
-type BackendEndpoint struct {
-	URL         string             `json:"url,omitempty"`
-	Description string             `json:"description,omitempty"`
-	HealthCheck *HealthCheckConfig `json:"healthCheck,omitempty"`
-	Weight      int                `json:"weight,omitempty"`
-	MTLS        *MTLSConfig        `json:"mtls,omitempty"`
-}
-
-// HealthCheckConfig represents health check configuration
-type HealthCheckConfig struct {
-	Enabled            bool `json:"enabled,omitempty"`
-	Interval           int  `json:"interval,omitempty"`
-	Timeout            int  `json:"timeout,omitempty"`
-	UnhealthyThreshold int  `json:"unhealthyThreshold,omitempty"`
-	HealthyThreshold   int  `json:"healthyThreshold,omitempty"`
-}
-
-// TimeoutConfig represents timeout configuration
-type TimeoutConfig struct {
-	Connect int `json:"connect,omitempty"`
-	Read    int `json:"read,omitempty"`
-	Write   int `json:"write,omitempty"`
-}
-
-// LoadBalanceConfig represents load balancing configuration
-type LoadBalanceConfig struct {
-	Algorithm string `json:"algorithm,omitempty"`
-	Failover  bool   `json:"failover,omitempty"`
-}
-
-// CircuitBreakerConfig represents circuit breaker configuration
-type CircuitBreakerConfig struct {
-	Enabled            bool `json:"enabled,omitempty"`
-	MaxConnections     int  `json:"maxConnections,omitempty"`
-	MaxPendingRequests int  `json:"maxPendingRequests,omitempty"`
-	MaxRequests        int  `json:"maxRequests,omitempty"`
-	MaxRetries         int  `json:"maxRetries,omitempty"`
-}
-
 // Operation represents an API operation
 type Operation struct {
 	Name        string            `json:"name,omitempty"`
@@ -158,26 +85,18 @@ type Channel struct {
 
 // OperationRequest represents operation request details
 type OperationRequest struct {
-	Method          string                `json:"method,omitempty"`
-	Path            string                `json:"path,omitempty"`
-	BackendServices []BackendRouting      `json:"backend-services,omitempty"`
-	Authentication  *AuthenticationConfig `json:"authentication,omitempty"`
-	Policies        []Policy              `json:"policies,omitempty"`
+	Method         string                `json:"method,omitempty"`
+	Path           string                `json:"path,omitempty"`
+	Authentication *AuthenticationConfig `json:"authentication,omitempty"`
+	Policies       []Policy              `json:"policies,omitempty"`
 }
 
 // ChannelRequest represents channel request details
 type ChannelRequest struct {
-	Method          string                `json:"method,omitempty"`
-	Name            string                `json:"name,omitempty"`
-	BackendServices []BackendRouting      `json:"backend-services,omitempty"`
-	Authentication  *AuthenticationConfig `json:"authentication,omitempty"`
-	Policies        []Policy              `json:"policies,omitempty"`
-}
-
-// BackendRouting represents backend routing configuration
-type BackendRouting struct {
-	Name   string `json:"name,omitempty"`
-	Weight int    `json:"weight,omitempty"`
+	Method         string                `json:"method,omitempty"`
+	Name           string                `json:"name,omitempty"`
+	Authentication *AuthenticationConfig `json:"authentication,omitempty"`
+	Policies       []Policy              `json:"policies,omitempty"`
 }
 
 // AuthenticationConfig represents authentication configuration for operations
