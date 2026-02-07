@@ -41,6 +41,7 @@ type API struct {
 	Policies        []Policy         `json:"policies,omitempty"`
 	Operations      []Operation      `json:"operations,omitempty"`
 	Channels        []Channel        `json:"channels,omitempty"`
+	Upstream        *UpstreamConfig  `json:"upstream,omitempty" db:"-"`
 }
 
 // TableName returns the table name for the API model

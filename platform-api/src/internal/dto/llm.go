@@ -154,7 +154,7 @@ type LLMProvider struct {
 	Context        string                 `json:"context,omitempty" yaml:"context,omitempty"`
 	VHost          string                 `json:"vhost,omitempty" yaml:"vhost,omitempty"`
 	Template       string                 `json:"template" yaml:"template" binding:"required"`
-	Upstream       LLMUpstream            `json:"upstream" yaml:"upstream" binding:"required"`
+	Upstream       UpstreamConfig         `json:"upstream" yaml:"upstream" binding:"required"`
 	OpenAPI        string                 `json:"openapi,omitempty" yaml:"openapi,omitempty"`
 	ModelProviders []LLMModelProvider     `json:"modelProviders,omitempty" yaml:"modelProviders,omitempty"`
 	AccessControl  LLMAccessControl       `json:"accessControl" yaml:"accessControl" binding:"required"`

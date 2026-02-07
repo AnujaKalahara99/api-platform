@@ -272,11 +272,16 @@ func (r *LLMProviderRepo) Create(p *model.LLMProvider) error {
 	if err != nil {
 		return err
 	}
+	// Extract upstream URL and auth from the new Upstream structure for database storage
+	var upstreamURL string
 	var upstreamAuthJSON []byte
-	if p.UpstreamAuth != nil {
-		upstreamAuthJSON, err = json.Marshal(p.UpstreamAuth)
-		if err != nil {
-			return err
+	if p.Upstream != nil && p.Upstream.Main != nil {
+		upstreamURL = p.Upstream.Main.URL
+		if p.Upstream.Main.Auth != nil {
+			upstreamAuthJSON, err = json.Marshal(p.Upstream.Main.Auth)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -295,7 +300,7 @@ func (r *LLMProviderRepo) Create(p *model.LLMProvider) error {
 
 	_, err = tx.Exec(r.db.Rebind(query),
 		p.UUID, p.OrganizationUUID, p.ID, p.Name, p.Description, p.CreatedBy, p.Version, p.Context, p.VHost, p.Template,
-		p.UpstreamURL, string(upstreamAuthJSON), p.OpenAPISpec, string(modelProvidersJSON), string(rateLimitingJSON),
+		upstreamURL, string(upstreamAuthJSON), p.OpenAPISpec, string(modelProvidersJSON), string(rateLimitingJSON),
 		string(accessControlJSON), policiesColumn, p.Status,
 		p.CreatedAt, p.UpdatedAt,
 	)
@@ -331,10 +336,20 @@ func (r *LLMProviderRepo) GetByID(providerID, orgUUID string) (*model.LLMProvide
 		return nil, err
 	}
 
-	p.UpstreamURL = upstreamURL.String
-	if upstreamAuthJSON.Valid && upstreamAuthJSON.String != "" {
-		if err := json.Unmarshal([]byte(upstreamAuthJSON.String), &p.UpstreamAuth); err != nil {
-			return nil, fmt.Errorf("unmarshal upstreamAuth for provider %s: %w", p.ID, err)
+	// Populate Upstream structure from database fields
+	if upstreamURL.String != "" || (upstreamAuthJSON.Valid && upstreamAuthJSON.String != "") {
+		p.Upstream = &model.UpstreamConfig{
+			Main: &model.UpstreamEndpoint{},
+		}
+		if upstreamURL.String != "" {
+			p.Upstream.Main.URL = upstreamURL.String
+		}
+		if upstreamAuthJSON.Valid && upstreamAuthJSON.String != "" {
+			var auth model.UpstreamAuth
+			if err := json.Unmarshal([]byte(upstreamAuthJSON.String), &auth); err != nil {
+				return nil, fmt.Errorf("unmarshal upstreamAuth for provider %s: %w", p.ID, err)
+			}
+			p.Upstream.Main.Auth = &auth
 		}
 	}
 	if openAPISpec.Valid {
@@ -392,10 +407,20 @@ func (r *LLMProviderRepo) List(orgUUID string, limit, offset int) ([]*model.LLMP
 		if err != nil {
 			return nil, err
 		}
-		p.UpstreamURL = upstreamURL.String
-		if upstreamAuthJSON.Valid && upstreamAuthJSON.String != "" {
-			if err := json.Unmarshal([]byte(upstreamAuthJSON.String), &p.UpstreamAuth); err != nil {
-				return nil, fmt.Errorf("unmarshal upstreamAuth for provider %s: %w", p.ID, err)
+		// Populate Upstream structure from database fields
+		if upstreamURL.String != "" || (upstreamAuthJSON.Valid && upstreamAuthJSON.String != "") {
+			p.Upstream = &model.UpstreamConfig{
+				Main: &model.UpstreamEndpoint{},
+			}
+			if upstreamURL.String != "" {
+				p.Upstream.Main.URL = upstreamURL.String
+			}
+			if upstreamAuthJSON.Valid && upstreamAuthJSON.String != "" {
+				var auth model.UpstreamAuth
+				if err := json.Unmarshal([]byte(upstreamAuthJSON.String), &auth); err != nil {
+					return nil, fmt.Errorf("unmarshal upstreamAuth for provider %s: %w", p.ID, err)
+				}
+				p.Upstream.Main.Auth = &auth
 			}
 		}
 		if openAPISpec.Valid {
@@ -453,11 +478,16 @@ func (r *LLMProviderRepo) Update(p *model.LLMProvider) error {
 	if err != nil {
 		return err
 	}
+	// Extract upstream URL and auth from the new Upstream structure for database storage
+	var upstreamURL string
 	var upstreamAuthJSON []byte
-	if p.UpstreamAuth != nil {
-		upstreamAuthJSON, err = json.Marshal(p.UpstreamAuth)
-		if err != nil {
-			return err
+	if p.Upstream != nil && p.Upstream.Main != nil {
+		upstreamURL = p.Upstream.Main.URL
+		if p.Upstream.Main.Auth != nil {
+			upstreamAuthJSON, err = json.Marshal(p.Upstream.Main.Auth)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -475,7 +505,7 @@ func (r *LLMProviderRepo) Update(p *model.LLMProvider) error {
 
 	result, err := tx.Exec(r.db.Rebind(query),
 		p.Name, p.Description, p.Version, p.Context, p.VHost, p.Template,
-		p.UpstreamURL, string(upstreamAuthJSON), p.OpenAPISpec, string(modelProvidersJSON), string(rateLimitingJSON),
+		upstreamURL, string(upstreamAuthJSON), p.OpenAPISpec, string(modelProvidersJSON), string(rateLimitingJSON),
 		string(accessControlJSON), policiesColumn, p.Status, p.UpdatedAt,
 		p.ID, p.OrganizationUUID,
 	)

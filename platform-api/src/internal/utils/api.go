@@ -64,6 +64,7 @@ func (u *APIUtil) DTOToModel(dto *dto.API) *model.API {
 		Policies:        u.PoliciesDTOToModel(dto.Policies),
 		Operations:      u.OperationsDTOToModel(dto.Operations),
 		Channels:        u.ChannelsDTOToModel(dto.Channels),
+		Upstream:        u.UpstreamConfigDTOToModel(dto.Upstream),
 	}
 }
 
@@ -93,6 +94,7 @@ func (u *APIUtil) ModelToDTO(model *model.API) *dto.API {
 		Policies:        u.PoliciesModelToDTO(model.Policies),
 		Operations:      u.OperationsModelToDTO(model.Operations),
 		Channels:        u.ChannelsModelToDTO(model.Channels),
+		Upstream:        u.UpstreamConfigModelToDTO(model.Upstream),
 	}
 }
 
@@ -568,6 +570,76 @@ func (u *APIUtil) PolicyModelToDTO(model *model.Policy) *dto.Policy {
 	}
 }
 
+// UpstreamConfigDTOToModel converts UpstreamConfig DTO to Model
+func (u *APIUtil) UpstreamConfigDTOToModel(dto *dto.UpstreamConfig) *model.UpstreamConfig {
+	if dto == nil {
+		return nil
+	}
+	out := &model.UpstreamConfig{}
+	if dto.Main != nil {
+		out.Main = &model.UpstreamEndpoint{
+			URL: dto.Main.URL,
+			Ref: dto.Main.Ref,
+		}
+		if dto.Main.Auth != nil {
+			out.Main.Auth = &model.UpstreamAuth{
+				Type:   dto.Main.Auth.Type,
+				Header: dto.Main.Auth.Header,
+				Value:  dto.Main.Auth.Value,
+			}
+		}
+	}
+	if dto.Sandbox != nil {
+		out.Sandbox = &model.UpstreamEndpoint{
+			URL: dto.Sandbox.URL,
+			Ref: dto.Sandbox.Ref,
+		}
+		if dto.Sandbox.Auth != nil {
+			out.Sandbox.Auth = &model.UpstreamAuth{
+				Type:   dto.Sandbox.Auth.Type,
+				Header: dto.Sandbox.Auth.Header,
+				Value:  dto.Sandbox.Auth.Value,
+			}
+		}
+	}
+	return out
+}
+
+// UpstreamConfigModelToDTO converts UpstreamConfig Model to DTO
+func (u *APIUtil) UpstreamConfigModelToDTO(model *model.UpstreamConfig) *dto.UpstreamConfig {
+	if model == nil {
+		return nil
+	}
+	out := &dto.UpstreamConfig{}
+	if model.Main != nil {
+		out.Main = &dto.UpstreamEndpoint{
+			URL: model.Main.URL,
+			Ref: model.Main.Ref,
+		}
+		if model.Main.Auth != nil {
+			out.Main.Auth = &dto.UpstreamAuth{
+				Type:   model.Main.Auth.Type,
+				Header: model.Main.Auth.Header,
+				Value:  model.Main.Auth.Value,
+			}
+		}
+	}
+	if model.Sandbox != nil {
+		out.Sandbox = &dto.UpstreamEndpoint{
+			URL: model.Sandbox.URL,
+			Ref: model.Sandbox.Ref,
+		}
+		if model.Sandbox.Auth != nil {
+			out.Sandbox.Auth = &dto.UpstreamAuth{
+				Type:   model.Sandbox.Auth.Type,
+				Header: model.Sandbox.Auth.Header,
+				Value:  model.Sandbox.Auth.Value,
+			}
+		}
+	}
+	return out
+}
+
 // GetAPISubType determines the API subtype based on the API type using constants
 func (u *APIUtil) GetAPISubType(apiType string) string {
 	switch apiType {
@@ -885,6 +957,24 @@ func (u *APIUtil) APIYAMLDataToDTO(yamlData *dto.APIYAMLData) *dto.API {
 		}
 	}
 
+	// Map upstream from YAML to DTO
+	var upstream *dto.UpstreamConfig
+	if yamlData.Upstream != nil {
+		upstream = &dto.UpstreamConfig{}
+		if yamlData.Upstream.Main != nil {
+			upstream.Main = &dto.UpstreamEndpoint{
+				URL: yamlData.Upstream.Main.URL,
+				Ref: yamlData.Upstream.Main.Ref,
+			}
+		}
+		if yamlData.Upstream.Sandbox != nil {
+			upstream.Sandbox = &dto.UpstreamEndpoint{
+				URL: yamlData.Upstream.Sandbox.URL,
+				Ref: yamlData.Upstream.Sandbox.Ref,
+			}
+		}
+	}
+
 	// Create and populate API DTO with available fields
 	api := &dto.API{
 		Name:            yamlData.DisplayName,
@@ -893,6 +983,7 @@ func (u *APIUtil) APIYAMLDataToDTO(yamlData *dto.APIYAMLData) *dto.API {
 		BackendServices: backendServices,
 		Operations:      operations,
 		Policies:        yamlData.Policies,
+		Upstream:        upstream,
 
 		// Set reasonable defaults for required fields that aren't in APIYAMLData
 		LifeCycleStatus: "CREATED",

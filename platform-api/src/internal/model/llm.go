@@ -137,8 +137,7 @@ type LLMProvider struct {
 	Context          string                 `json:"context,omitempty" db:"context"`
 	VHost            string                 `json:"vhost,omitempty" db:"vhost"`
 	Template         string                 `json:"template" db:"template"`
-	UpstreamURL      string                 `json:"-" db:"upstream_url"`
-	UpstreamAuth     *UpstreamAuth          `json:"upstreamAuth,omitempty" db:"-"`
+	Upstream         *UpstreamConfig        `json:"upstream,omitempty" db:"-"`
 	OpenAPISpec      string                 `json:"openapi,omitempty" db:"openapi_spec"`
 	ModelProviders   []LLMModelProvider     `json:"modelProviders,omitempty" db:"-"`
 	RateLimiting     *LLMRateLimitingConfig `json:"rateLimiting,omitempty" db:"-"`

@@ -40,6 +40,7 @@ type API struct {
 	Policies        []Policy         `json:"policies,omitempty" yaml:"policies,omitempty"`
 	Operations      []Operation      `json:"operations,omitempty" yaml:"operations,omitempty"`
 	Channels        []Channel        `json:"channels,omitempty" yaml:"channels,omitempty"`
+	Upstream        *UpstreamConfig  `json:"upstream,omitempty" yaml:"upstream,omitempty"`
 }
 
 // MTLSConfig represents mutual TLS configuration

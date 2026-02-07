@@ -4161,10 +4161,21 @@ components:
 
     Upstream:
       type: object
+      description: Upstream backend configuration with main and sandbox endpoints
+      required:
+        - main
+      properties:
+        main:
+          $ref: '#/components/schemas/UpstreamDefinition'
+        sandbox:
+          $ref: '#/components/schemas/UpstreamDefinition'
+
+    UpstreamDefinition:
+      type: object
       oneOf:
         - required: [ "url" ]
         - required: [ "ref" ]
-      description: Upstream backend configuration (single target or reference)
+      description: Upstream endpoint configuration (single target or reference)
       properties:
         url:
           type: string
@@ -4174,22 +4185,26 @@ components:
         ref:
           type: string
           description: Reference to a predefined upstreamDefinition
+        auth:
+          $ref: '#/components/schemas/UpstreamAuth'
 
     UpstreamAuth:
       type: object
+      description: Authentication configuration for upstream endpoints
       properties:
-        auth:
-          type: object
-          required:
-            - type
-          properties:
-            type:
-              type: string
-              enum: [ api-key, bearer ]
-            header:
-              type: string
-            value:
-              type: string
+        type:
+          type: string
+          description: Authentication type
+          enum: [ basic, bearer, api-key ]
+          example: api-key
+        header:
+          type: string
+          description: Header name for api-key authentication (e.g., 'Authorization' for bearer/basic, custom header for api-key)
+          example: X-API-Key
+        value:
+          type: string
+          description: Authentication value (API key, Bearer token, or Base64 encoded credentials for basic auth)
+          example: my-api-key-value
 
     ExtractionIdentifier:
       type: object
@@ -4596,9 +4611,7 @@ components:
           items:
             $ref: '#/components/schemas/LLMModelProvider'
         upstream:
-          allOf:
-            - $ref: "#/components/schemas/Upstream"
-            - $ref: "#/components/schemas/UpstreamAuth"
+          $ref: "#/components/schemas/Upstream"
         accessControl:
           $ref: '#/components/schemas/LLMAccessControl'
         rateLimiting:

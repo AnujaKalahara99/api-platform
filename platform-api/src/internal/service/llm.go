@@ -268,8 +268,7 @@ func (s *LLMProviderService) Create(orgUUID, createdBy string, req *dto.LLMProvi
 		Context:          defaultString(req.Context, "/"),
 		VHost:            req.VHost,
 		Template:         req.Template,
-		UpstreamURL:      req.Upstream.URL,
-		UpstreamAuth:     mapUpstreamAuth(req.Upstream.Auth),
+		Upstream:         mapUpstreamConfig(req.Upstream),
 		OpenAPISpec:      req.OpenAPI,
 		ModelProviders:   mapModelProviders(req.ModelProviders),
 		AccessControl:    mapAccessControl(&req.AccessControl),
@@ -381,8 +380,7 @@ func (s *LLMProviderService) Update(orgUUID, handle string, req *dto.LLMProvider
 		Context:          defaultString(req.Context, "/"),
 		VHost:            req.VHost,
 		Template:         req.Template,
-		UpstreamURL:      req.Upstream.URL,
-		UpstreamAuth:     mapUpstreamAuth(req.Upstream.Auth),
+		Upstream:         mapUpstreamConfig(req.Upstream),
 		OpenAPISpec:      req.OpenAPI,
 		ModelProviders:   mapModelProviders(req.ModelProviders),
 		AccessControl:    mapAccessControl(&req.AccessControl),
@@ -678,8 +676,8 @@ func isSQLiteUniqueConstraint(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-func validateUpstream(u dto.LLMUpstream) error {
-	if u.URL == "" {
+func validateUpstream(u dto.UpstreamConfig) error {
+	if u.Main == nil || (u.Main.URL == "" && u.Main.Ref == "") {
 		return constants.ErrInvalidInput
 	}
 	return nil
@@ -728,11 +726,72 @@ func mapPolicies(in []dto.LLMPolicy) []model.LLMPolicy {
 	return out
 }
 
-func mapUpstreamAuth(in *dto.LLMUpstreamAuth) *model.UpstreamAuth {
+func mapUpstreamAuth(in *dto.UpstreamAuth) *model.UpstreamAuth {
 	if in == nil {
 		return nil
 	}
-	return &model.UpstreamAuth{Type: in.Type, Header: in.Header, Value: in.Value}
+	return &model.UpstreamAuth{
+		Type:   in.Type,
+		Header: in.Header,
+		Value:  in.Value,
+	}
+}
+
+func mapUpstreamConfig(in dto.UpstreamConfig) *model.UpstreamConfig {
+	out := &model.UpstreamConfig{}
+	if in.Main != nil {
+		out.Main = &model.UpstreamEndpoint{
+			URL: in.Main.URL,
+			Ref: in.Main.Ref,
+		}
+		if in.Main.Auth != nil {
+			out.Main.Auth = mapUpstreamAuth(in.Main.Auth)
+		}
+	}
+	if in.Sandbox != nil {
+		out.Sandbox = &model.UpstreamEndpoint{
+			URL: in.Sandbox.URL,
+			Ref: in.Sandbox.Ref,
+		}
+		if in.Sandbox.Auth != nil {
+			out.Sandbox.Auth = mapUpstreamAuth(in.Sandbox.Auth)
+		}
+	}
+	return out
+}
+
+func mapUpstreamConfigToDTO(in *model.UpstreamConfig) dto.UpstreamConfig {
+	if in == nil {
+		return dto.UpstreamConfig{}
+	}
+	out := dto.UpstreamConfig{}
+	if in.Main != nil {
+		out.Main = &dto.UpstreamEndpoint{
+			URL: in.Main.URL,
+			Ref: in.Main.Ref,
+		}
+		if in.Main.Auth != nil {
+			out.Main.Auth = &dto.UpstreamAuth{
+				Type:   in.Main.Auth.Type,
+				Header: in.Main.Auth.Header,
+				Value:  in.Main.Auth.Value,
+			}
+		}
+	}
+	if in.Sandbox != nil {
+		out.Sandbox = &dto.UpstreamEndpoint{
+			URL: in.Sandbox.URL,
+			Ref: in.Sandbox.Ref,
+		}
+		if in.Sandbox.Auth != nil {
+			out.Sandbox.Auth = &dto.UpstreamAuth{
+				Type:   in.Sandbox.Auth.Type,
+				Header: in.Sandbox.Auth.Header,
+				Value:  in.Sandbox.Auth.Value,
+			}
+		}
+	}
+	return out
 }
 
 func mapRateLimiting(in *dto.LLMRateLimitingConfig) *model.LLMRateLimitingConfig {
@@ -875,16 +934,11 @@ func mapProviderModelToDTO(m *model.LLMProvider) *dto.LLMProvider {
 		OpenAPI:        m.OpenAPISpec,
 		ModelProviders: mapModelProvidersDTO(m.ModelProviders),
 		RateLimiting:   mapRateLimitingDTO(m.RateLimiting),
-		Upstream: dto.LLMUpstream{
-			URL: m.UpstreamURL,
-		},
-		AccessControl: dto.LLMAccessControl{Mode: "deny_all"},
-		Policies:      nil,
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
-	}
-	if m.UpstreamAuth != nil {
-		out.Upstream.Auth = &dto.LLMUpstreamAuth{Type: m.UpstreamAuth.Type, Header: m.UpstreamAuth.Header}
+		Upstream:       mapUpstreamConfigToDTO(m.Upstream),
+		AccessControl:  dto.LLMAccessControl{Mode: "deny_all"},
+		Policies:       nil,
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
 	}
 	if m.AccessControl != nil {
 		ac := dto.LLMAccessControl{Mode: m.AccessControl.Mode}
