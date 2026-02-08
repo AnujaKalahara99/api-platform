@@ -67,7 +67,7 @@ func (r *ArtifactRepo) Update(tx *sql.Tx, artifact *model.Artifact) error {
 func (r *ArtifactRepo) Exists(kind, handle, orgUUID string) (bool, error) {
 	query := `SELECT COUNT(*) FROM artifacts WHERE kind = ? AND handle = ? AND organization_uuid = ?`
 	var count int
-	err := r.db.QueryRow(query, kind, handle, orgUUID).Scan(&count)
+	err := r.db.QueryRow(r.db.Rebind(query), kind, handle, orgUUID).Scan(&count)
 	if err != nil {
 		return false, err
 	}

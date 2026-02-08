@@ -307,14 +307,14 @@ func (r *LLMProviderRepo) Create(p *model.LLMProvider) error {
 }
 
 func (r *LLMProviderRepo) GetByID(providerID, orgUUID string) (*model.LLMProvider, error) {
-	row := r.db.QueryRow(`
+	query := `
 		SELECT
 			a.uuid, a.handle, a.name, a.version, a.organization_uuid, a.created_at, a.updated_at,
 			p.description, p.created_by, p.template, p.openapi_spec, p.model_list, p.status, p.configuration
 		FROM artifacts a
 		JOIN llm_providers p ON a.uuid = p.uuid
-		WHERE a.handle = ? AND a.organization_uuid = ? AND a.kind = ?
-	`, providerID, orgUUID, constants.LLMProvider)
+		WHERE a.handle = ? AND a.organization_uuid = ? AND a.kind = ?`
+	row := r.db.QueryRow(r.db.Rebind(query), providerID, orgUUID, constants.LLMProvider)
 
 	var p model.LLMProvider
 	var openAPISpec, modelProvidersRaw sql.NullString
@@ -350,7 +350,7 @@ func (r *LLMProviderRepo) GetByID(providerID, orgUUID string) (*model.LLMProvide
 }
 
 func (r *LLMProviderRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProvider, error) {
-	rows, err := r.db.Query(`
+	query := `
 		SELECT
 			a.uuid, a.handle, a.name, a.version, a.organization_uuid, a.created_at, a.updated_at,
 			p.description, p.created_by, p.template, p.openapi_spec, p.model_list, p.status, p.configuration
@@ -358,8 +358,8 @@ func (r *LLMProviderRepo) List(orgUUID string, limit, offset int) ([]*model.LLMP
 		JOIN llm_providers p ON a.uuid = p.uuid
 		WHERE a.organization_uuid = ? AND a.kind = ?
 		ORDER BY a.created_at DESC
-		LIMIT ? OFFSET ?
-	`, orgUUID, constants.LLMProvider, limit, offset)
+		LIMIT ? OFFSET ?`
+	rows, err := r.db.Query(r.db.Rebind(query), orgUUID, constants.LLMProvider, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -576,14 +576,14 @@ func (r *LLMProxyRepo) Create(p *model.LLMProxy) error {
 }
 
 func (r *LLMProxyRepo) GetByID(proxyID, orgUUID string) (*model.LLMProxy, error) {
-	row := r.db.QueryRow(`
+	query := `
 		SELECT
 			a.uuid, a.handle, a.name, a.version, a.organization_uuid, a.created_at, a.updated_at,
 			p.project_uuid, p.description, p.created_by, p.provider_uuid, p.openapi_spec, p.status, p.configuration
 		FROM artifacts a
 		JOIN llm_proxies p ON a.uuid = p.uuid
-		WHERE a.handle = ? AND a.organization_uuid = ? AND a.kind = ?
-	`, proxyID, orgUUID, constants.LLMProxy)
+		WHERE a.handle = ? AND a.organization_uuid = ? AND a.kind = ?`
+	row := r.db.QueryRow(r.db.Rebind(query), proxyID, orgUUID, constants.LLMProxy)
 
 	var p model.LLMProxy
 	var openAPISpec, configurationJSON sql.NullString
@@ -613,7 +613,7 @@ func (r *LLMProxyRepo) GetByID(proxyID, orgUUID string) (*model.LLMProxy, error)
 }
 
 func (r *LLMProxyRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProxy, error) {
-	rows, err := r.db.Query(`
+	query := `
 		SELECT
 			a.uuid, a.handle, a.name, a.version, a.organization_uuid, a.created_at, a.updated_at,
 			p.project_uuid, p.description, p.created_by, p.provider_uuid,
@@ -622,8 +622,8 @@ func (r *LLMProxyRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProx
 		JOIN llm_proxies p ON a.uuid = p.uuid
 		WHERE a.organization_uuid = ? AND a.kind = ?
 		ORDER BY a.created_at DESC
-		LIMIT ? OFFSET ?
-	`, orgUUID, constants.LLMProxy, limit, offset)
+		LIMIT ? OFFSET ?`
+	rows, err := r.db.Query(r.db.Rebind(query), orgUUID, constants.LLMProxy, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -657,7 +657,7 @@ func (r *LLMProxyRepo) List(orgUUID string, limit, offset int) ([]*model.LLMProx
 }
 
 func (r *LLMProxyRepo) ListByProject(orgUUID, projectUUID string, limit, offset int) ([]*model.LLMProxy, error) {
-	rows, err := r.db.Query(`
+	query := `
 		SELECT
 			a.uuid, a.handle, a.name, a.version, a.organization_uuid, a.created_at, a.updated_at,
 			p.project_uuid, p.description, p.created_by, p.provider_uuid,
@@ -666,8 +666,8 @@ func (r *LLMProxyRepo) ListByProject(orgUUID, projectUUID string, limit, offset 
 		JOIN llm_proxies p ON a.uuid = p.uuid
 		WHERE a.organization_uuid = ? AND p.project_uuid = ? AND a.kind = ?
 		ORDER BY a.created_at DESC
-		LIMIT ? OFFSET ?
-	`, orgUUID, projectUUID, constants.LLMProxy, limit, offset)
+		LIMIT ? OFFSET ?`
+	rows, err := r.db.Query(r.db.Rebind(query), orgUUID, projectUUID, constants.LLMProxy, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -701,7 +701,7 @@ func (r *LLMProxyRepo) ListByProject(orgUUID, projectUUID string, limit, offset 
 }
 
 func (r *LLMProxyRepo) ListByProvider(orgUUID, providerUUID string, limit, offset int) ([]*model.LLMProxy, error) {
-	rows, err := r.db.Query(`
+	query := `
 		SELECT
 			a.uuid, a.handle, a.name, a.version, a.organization_uuid, a.created_at, a.updated_at,
 			p.project_uuid, p.description, p.created_by, p.provider_uuid,
@@ -710,8 +710,8 @@ func (r *LLMProxyRepo) ListByProvider(orgUUID, providerUUID string, limit, offse
 		JOIN llm_proxies p ON a.uuid = p.uuid
 		WHERE a.organization_uuid = ? AND p.provider_uuid = ? AND a.kind = ?
 		ORDER BY a.created_at DESC
-		LIMIT ? OFFSET ?
-	`, orgUUID, providerUUID, constants.LLMProxy, limit, offset)
+		LIMIT ? OFFSET ?`
+	rows, err := r.db.Query(r.db.Rebind(query), orgUUID, providerUUID, constants.LLMProxy, limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -746,11 +746,11 @@ func (r *LLMProxyRepo) ListByProvider(orgUUID, providerUUID string, limit, offse
 
 func (r *LLMProxyRepo) Count(orgUUID string) (int, error) {
 	var count int
-	if err := r.db.QueryRow(`
+	query := `
 		SELECT COUNT(*) FROM artifacts a
 		JOIN llm_proxies p ON a.uuid = p.uuid
-		WHERE a.organization_uuid = ? AND a.kind = ?
-	`, orgUUID, constants.LLMProxy).Scan(&count); err != nil {
+		WHERE a.organization_uuid = ? AND a.kind = ?`
+	if err := r.db.QueryRow(r.db.Rebind(query), orgUUID, constants.LLMProxy).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -758,11 +758,11 @@ func (r *LLMProxyRepo) Count(orgUUID string) (int, error) {
 
 func (r *LLMProxyRepo) CountByProject(orgUUID, projectUUID string) (int, error) {
 	var count int
-	if err := r.db.QueryRow(`
+	query := `
 		SELECT COUNT(*) FROM artifacts a
 		JOIN llm_proxies p ON a.uuid = p.uuid
-		WHERE a.organization_uuid = ? AND p.project_uuid = ? AND a.kind = ?
-	`, orgUUID, projectUUID, constants.LLMProxy).Scan(&count); err != nil {
+		WHERE a.organization_uuid = ? AND p.project_uuid = ? AND a.kind = ?`
+	if err := r.db.QueryRow(r.db.Rebind(query), orgUUID, projectUUID, constants.LLMProxy).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -770,11 +770,11 @@ func (r *LLMProxyRepo) CountByProject(orgUUID, projectUUID string) (int, error) 
 
 func (r *LLMProxyRepo) CountByProvider(orgUUID, providerUUID string) (int, error) {
 	var count int
-	if err := r.db.QueryRow(`
+	query := `
 		SELECT COUNT(*) FROM artifacts a
 		JOIN llm_proxies p ON a.uuid = p.uuid
-		WHERE a.organization_uuid = ? AND p.provider_uuid = ? AND a.kind = ?
-	`, orgUUID, providerUUID, constants.LLMProxy).Scan(&count); err != nil {
+		WHERE a.organization_uuid = ? AND p.provider_uuid = ? AND a.kind = ?`
+	if err := r.db.QueryRow(r.db.Rebind(query), orgUUID, providerUUID, constants.LLMProxy).Scan(&count); err != nil {
 		return 0, err
 	}
 	return count, nil
@@ -797,10 +797,10 @@ func (r *LLMProxyRepo) Update(p *model.LLMProxy) error {
 
 	// Get the proxy UUID from handle
 	var proxyUUID string
-	err = tx.QueryRow(`
+	query := `
 		SELECT uuid FROM artifacts
-		WHERE handle = ? AND organization_uuid = ? AND kind = ?
-	`, p.ID, p.OrganizationUUID, constants.LLMProxy).Scan(&proxyUUID)
+		WHERE handle = ? AND organization_uuid = ? AND kind = ?`
+	err = tx.QueryRow(r.db.Rebind(query), p.ID, p.OrganizationUUID, constants.LLMProxy).Scan(&proxyUUID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return sql.ErrNoRows
