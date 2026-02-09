@@ -109,9 +109,10 @@ type LLMProviderTemplateAuth struct {
 }
 
 type LLMProviderTemplateMetadata struct {
-	EndpointURL string                   `json:"endpointUrl,omitempty" yaml:"endpointUrl,omitempty"`
-	Auth        *LLMProviderTemplateAuth `json:"auth,omitempty" yaml:"auth,omitempty"`
-	LogoURL     string                   `json:"logoUrl,omitempty" yaml:"logoUrl,omitempty"`
+	EndpointURL    string                   `json:"endpointUrl,omitempty" yaml:"endpointUrl,omitempty"`
+	Auth           *LLMProviderTemplateAuth `json:"auth,omitempty" yaml:"auth,omitempty"`
+	LogoURL        string                   `json:"logoUrl,omitempty" yaml:"logoUrl,omitempty"`
+	OpenapiSpecURL string                   `json:"openapiSpecUrl,omitempty" yaml:"openapiSpecUrl,omitempty"`
 }
 
 type LLMProviderTemplate struct {

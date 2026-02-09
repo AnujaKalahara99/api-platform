@@ -926,8 +926,9 @@ func mapTemplateMetadata(in *dto.LLMProviderTemplateMetadata) *model.LLMProvider
 		EndpointURL: strings.TrimSpace(in.EndpointURL),
 		Auth:        auth,
 		LogoURL:     strings.TrimSpace(in.LogoURL),
+		OpenapiSpecURL: strings.TrimSpace(in.OpenapiSpecURL),
 	}
-	if out.EndpointURL == "" && out.LogoURL == "" && out.Auth == nil {
+	if out.EndpointURL == "" && out.LogoURL == "" && out.Auth == nil && out.OpenapiSpecURL == "" {
 		return nil
 	}
 	return out
@@ -949,6 +950,7 @@ func mapTemplateMetadataDTO(in *model.LLMProviderTemplateMetadata) *dto.LLMProvi
 		EndpointURL: in.EndpointURL,
 		Auth:        auth,
 		LogoURL:     in.LogoURL,
+		OpenapiSpecURL: in.OpenapiSpecURL,
 	}
 }
 

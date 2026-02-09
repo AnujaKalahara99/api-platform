@@ -106,6 +106,7 @@ type LLMProviderTemplateMetadata struct {
 	EndpointURL string                   `json:"endpointUrl,omitempty" db:"-"`
 	Auth        *LLMProviderTemplateAuth `json:"auth,omitempty" db:"-"`
 	LogoURL     string                   `json:"logoUrl,omitempty" db:"-"`
+	OpenapiSpecURL string                `json:"openapiSpecUrl,omitempty" db:"-"`
 }
 
 type LLMProviderTemplate struct {

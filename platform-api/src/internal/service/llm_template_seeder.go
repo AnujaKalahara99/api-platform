@@ -73,13 +73,23 @@ func (s *LLMTemplateSeeder) SeedForOrg(orgUUID string) error {
 		}
 		if _, ok := existingByID[tpl.ID]; ok {
 			current := existingByHandle[tpl.ID]
-			if current != nil && current.Metadata == nil && tpl.Metadata != nil {
-				current.Metadata = tpl.Metadata
-				if current.Name == "" {
-					current.Name = tpl.Name
+			if current != nil && tpl.Metadata != nil {
+				updated := false
+				if current.Metadata == nil {
+					current.Metadata = tpl.Metadata
+					updated = true
+				} else if current.Metadata.OpenapiSpecURL == "" && tpl.Metadata.OpenapiSpecURL != "" {
+					current.Metadata.OpenapiSpecURL = tpl.Metadata.OpenapiSpecURL
+					updated = true
 				}
-				if err := s.repo.Update(current); err != nil {
-					return fmt.Errorf("failed to update template metadata for %s: %w", tpl.ID, err)
+				if current.Name == "" && tpl.Name != "" {
+					current.Name = tpl.Name
+					updated = true
+				}
+				if updated {
+					if err := s.repo.Update(current); err != nil {
+						return fmt.Errorf("failed to update template metadata for %s: %w", tpl.ID, err)
+					}
 				}
 			}
 			continue

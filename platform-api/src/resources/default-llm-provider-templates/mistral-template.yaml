@@ -29,6 +29,7 @@ spec:
       header: Authorization
       valuePrefix: "Bearer "
     logoUrl: https://raw.githubusercontent.com/nomadxd/openapi-connectors/main/openapi/mistral/icon.png
+    openapiSpecUrl: https://raw.githubusercontent.com/nomadxd/openapi-connectors/main/openapi/mistral/openapi.yaml
   promptTokens:
     location: payload
     identifier: $.usage.prompt_tokens

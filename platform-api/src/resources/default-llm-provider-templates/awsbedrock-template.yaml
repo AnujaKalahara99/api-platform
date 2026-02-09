@@ -24,6 +24,7 @@ spec:
   displayName: AWS Bedrock
   metadata:
     logoUrl: https://raw.githubusercontent.com/nomadxd/openapi-connectors/main/openapi/aws.bedrock/icon.png
+    openapiSpecUrl: https://raw.githubusercontent.com/nomadxd/openapi-connectors/main/openapi/aws.bedrock/openapi.yaml
   promptTokens:
     location: payload
     identifier: $.usage.inputTokens

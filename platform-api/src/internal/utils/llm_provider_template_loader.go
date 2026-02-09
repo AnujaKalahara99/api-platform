@@ -43,6 +43,7 @@ type llmProviderTemplateMetadataYAML struct {
 	EndpointURL string                       `yaml:"endpointUrl"`
 	Auth        *llmProviderTemplateAuthYAML `yaml:"auth"`
 	LogoURL     string                       `yaml:"logoUrl"`
+	OpenapiSpecURL string                    `yaml:"openapiSpecUrl"`
 }
 
 type llmProviderTemplateYAML struct {
@@ -144,8 +145,9 @@ func mapTemplateMetadata(in *llmProviderTemplateMetadataYAML) *model.LLMProvider
 		EndpointURL: strings.TrimSpace(in.EndpointURL),
 		Auth:        auth,
 		LogoURL:     strings.TrimSpace(in.LogoURL),
+		OpenapiSpecURL: strings.TrimSpace(in.OpenapiSpecURL),
 	}
-	if out.EndpointURL == "" && out.LogoURL == "" && out.Auth == nil {
+	if out.EndpointURL == "" && out.LogoURL == "" && out.Auth == nil && out.OpenapiSpecURL == "" {
 		return nil
 	}
 	return out
