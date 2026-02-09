@@ -59,15 +59,32 @@ type LLMPolicy struct {
 }
 
 type RateLimitingLimitConfig struct {
-	RequestCount         int      `json:"requestCount" yaml:"requestCount"`
-	RequestResetDuration int      `json:"requestResetDuration" yaml:"requestResetDuration"`
-	RequestResetUnit     string   `json:"requestResetUnit" yaml:"requestResetUnit"`
-	TokenCount           *int     `json:"tokenCount,omitempty" yaml:"tokenCount,omitempty"`
-	TokenResetDuration   *int     `json:"tokenResetDuration,omitempty" yaml:"tokenResetDuration,omitempty"`
-	TokenResetUnit       *string  `json:"tokenResetUnit,omitempty" yaml:"tokenResetUnit,omitempty"`
-	Cost                 *float64 `json:"cost,omitempty" yaml:"cost,omitempty"`
-	CostResetDuration    *int     `json:"costResetDuration,omitempty" yaml:"costResetDuration,omitempty"`
-	CostResetUnit        *string  `json:"costResetUnit,omitempty" yaml:"costResetUnit,omitempty"`
+	Request *RequestRateLimit `json:"request,omitempty" yaml:"request,omitempty"`
+	Token   *TokenRateLimit   `json:"token,omitempty" yaml:"token,omitempty"`
+	Cost    *CostRateLimit    `json:"cost,omitempty" yaml:"cost,omitempty"`
+}
+
+type RateLimitResetWindow struct {
+	Duration int    `json:"duration" yaml:"duration"`
+	Unit     string `json:"unit" yaml:"unit"`
+}
+
+type RequestRateLimit struct {
+	Enabled bool                 `json:"enabled" yaml:"enabled"`
+	Count   int                  `json:"count" yaml:"count"`
+	Reset   RateLimitResetWindow `json:"reset" yaml:"reset"`
+}
+
+type TokenRateLimit struct {
+	Enabled bool                 `json:"enabled" yaml:"enabled"`
+	Count   int                  `json:"count" yaml:"count"`
+	Reset   RateLimitResetWindow `json:"reset" yaml:"reset"`
+}
+
+type CostRateLimit struct {
+	Enabled bool                 `json:"enabled" yaml:"enabled"`
+	Amount  float64              `json:"amount" yaml:"amount"`
+	Reset   RateLimitResetWindow `json:"reset" yaml:"reset"`
 }
 
 type RateLimitingResourceLimit struct {

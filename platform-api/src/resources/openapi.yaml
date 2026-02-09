@@ -4233,38 +4233,62 @@ components:
       example:
         providerLevel:
           global:
-            requestCount: 1500
-            tokenCount: 1000000
-            requestResetDuration: 2
-            requestResetUnit: week
-            tokenResetDuration: 1
-            tokenResetUnit: month
+            request:
+              enabled: true
+              count: 1500
+              reset:
+                duration: 2
+                unit: week
+            token:
+              enabled: true
+              count: 1000000
+              reset:
+                duration: 1
+                unit: month
         consumerLevel:
           resourceWise:
             default:
-              requestCount: 50
-              cost: 100
-              requestResetDuration: 2
-              requestResetUnit: week
-              costResetDuration: 1
-              costResetUnit: month
+              request:
+                enabled: true
+                count: 50
+                reset:
+                  duration: 2
+                  unit: week
+              cost:
+                enabled: true
+                amount: 100
+                reset:
+                  duration: 1
+                  unit: month
             resources:
               - resource: /models
                 limit:
-                  requestCount: 200
-                  tokenCount: 100000
-                  requestResetDuration: 1
-                  requestResetUnit: week
-                  tokenResetDuration: 1
-                  tokenResetUnit: month
+                  request:
+                    enabled: true
+                    count: 200
+                    reset:
+                      duration: 1
+                      unit: week
+                  token:
+                    enabled: true
+                    count: 100000
+                    reset:
+                      duration: 1
+                      unit: month
               - resource: /chat/completions
                 limit:
-                  requestCount: 25
-                  cost: 10
-                  requestResetDuration: 1
-                  requestResetUnit: week
-                  costResetDuration: 1
-                  costResetUnit: month
+                  request:
+                    enabled: true
+                    count: 25
+                    reset:
+                      duration: 1
+                      unit: week
+                  cost:
+                    enabled: true
+                    amount: 10
+                    reset:
+                      duration: 1
+                      unit: month
 
     RateLimitingScopeConfig:
       type: object
@@ -4306,63 +4330,76 @@ components:
         limit:
           $ref: '#/components/schemas/RateLimitingLimitConfig'
 
-    RateLimitingLimitConfig:
+    RateLimitResetWindow:
       type: object
-      description: Limit definition using request count plus either token count or cost, each with its own reset window.
-      required:
-        - requestCount
-        - requestResetDuration
-        - requestResetUnit
-      oneOf:
-        - required: [ tokenCount, tokenResetDuration, tokenResetUnit ]
-        - required: [ cost, costResetDuration, costResetUnit ]
+      required: [ duration, unit ]
       properties:
-        requestCount:
+        duration:
+          type: integer
+          description: Reset duration for the limit window.
+          example: 2
+          minimum: 1
+        unit:
+          type: string
+          description: Reset time unit for the limit window.
+          enum: [ minute, hour, day, week, month ]
+          example: week
+
+    RequestRateLimitDimension:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable request-count based limiting.
+        count:
           type: integer
           description: Maximum number of requests in the reset window.
           example: 1500
           minimum: 1
-        requestResetDuration:
-          type: integer
-          description: Reset duration for the request count window.
-          example: 2
-          minimum: 1
-        requestResetUnit:
-          type: string
-          description: Reset time unit for the request count window.
-          enum: [ minute, hour, day, week, month ]
-          example: week
-        tokenCount:
+        reset:
+          $ref: '#/components/schemas/RateLimitResetWindow'
+
+    TokenRateLimitDimension:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable token-count based limiting.
+        count:
           type: integer
           description: Maximum number of tokens in the reset window.
           example: 1000000
           minimum: 1
-        tokenResetDuration:
-          type: integer
-          description: Reset duration for the token count window.
-          example: 1
-          minimum: 1
-        tokenResetUnit:
-          type: string
-          description: Reset time unit for the token count window.
-          enum: [ minute, hour, day, week, month ]
-          example: month
-        cost:
+        reset:
+          $ref: '#/components/schemas/RateLimitResetWindow'
+
+    CostRateLimitDimension:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Enable cost-based limiting.
+        amount:
           type: number
           format: float
           description: Maximum cost in the reset window.
           example: 1000
           minimum: 0
-        costResetDuration:
-          type: integer
-          description: Reset duration for the cost window.
-          example: 1
-          minimum: 1
-        costResetUnit:
-          type: string
-          description: Reset time unit for the cost window.
-          enum: [ minute, hour, day, week, month ]
-          example: month
+        reset:
+          $ref: '#/components/schemas/RateLimitResetWindow'
+
+    RateLimitingLimitConfig:
+      type: object
+      description: >-
+        Limit definition with independent request/token/cost dimensions.
+        If all dimensions are disabled (or absent), rate limiting is off for that scope.
+      properties:
+        request:
+          $ref: '#/components/schemas/RequestRateLimitDimension'
+        token:
+          $ref: '#/components/schemas/TokenRateLimitDimension'
+        cost:
+          $ref: '#/components/schemas/CostRateLimitDimension'
 
     LLMProvider:
       type: object

@@ -59,15 +59,32 @@ type LLMPolicy struct {
 }
 
 type RateLimitingLimitConfig struct {
-	RequestCount         int      `json:"requestCount" db:"-"`
-	RequestResetDuration int      `json:"requestResetDuration" db:"-"`
-	RequestResetUnit     string   `json:"requestResetUnit" db:"-"`
-	TokenCount           *int     `json:"tokenCount,omitempty" db:"-"`
-	TokenResetDuration   *int     `json:"tokenResetDuration,omitempty" db:"-"`
-	TokenResetUnit       *string  `json:"tokenResetUnit,omitempty" db:"-"`
-	Cost                 *float64 `json:"cost,omitempty" db:"-"`
-	CostResetDuration    *int     `json:"costResetDuration,omitempty" db:"-"`
-	CostResetUnit        *string  `json:"costResetUnit,omitempty" db:"-"`
+	Request *RequestRateLimit `json:"request,omitempty" db:"-"`
+	Token   *TokenRateLimit   `json:"token,omitempty" db:"-"`
+	Cost    *CostRateLimit    `json:"cost,omitempty" db:"-"`
+}
+
+type RateLimitResetWindow struct {
+	Duration int    `json:"duration" db:"-"`
+	Unit     string `json:"unit" db:"-"`
+}
+
+type RequestRateLimit struct {
+	Enabled bool                 `json:"enabled" db:"-"`
+	Count   int                  `json:"count" db:"-"`
+	Reset   RateLimitResetWindow `json:"reset" db:"-"`
+}
+
+type TokenRateLimit struct {
+	Enabled bool                 `json:"enabled" db:"-"`
+	Count   int                  `json:"count" db:"-"`
+	Reset   RateLimitResetWindow `json:"reset" db:"-"`
+}
+
+type CostRateLimit struct {
+	Enabled bool                 `json:"enabled" db:"-"`
+	Amount  float64              `json:"amount" db:"-"`
+	Reset   RateLimitResetWindow `json:"reset" db:"-"`
 }
 
 type RateLimitingResourceLimit struct {
@@ -103,10 +120,10 @@ type LLMProviderTemplateAuth struct {
 }
 
 type LLMProviderTemplateMetadata struct {
-	EndpointURL string                   `json:"endpointUrl,omitempty" db:"-"`
-	Auth        *LLMProviderTemplateAuth `json:"auth,omitempty" db:"-"`
-	LogoURL     string                   `json:"logoUrl,omitempty" db:"-"`
-	OpenapiSpecURL string                `json:"openapiSpecUrl,omitempty" db:"-"`
+	EndpointURL    string                   `json:"endpointUrl,omitempty" db:"-"`
+	Auth           *LLMProviderTemplateAuth `json:"auth,omitempty" db:"-"`
+	LogoURL        string                   `json:"logoUrl,omitempty" db:"-"`
+	OpenapiSpecURL string                   `json:"openapiSpecUrl,omitempty" db:"-"`
 }
 
 type LLMProviderTemplate struct {

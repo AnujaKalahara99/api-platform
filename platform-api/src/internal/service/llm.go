@@ -860,15 +860,49 @@ func mapRateLimitingLimit(in *dto.RateLimitingLimitConfig) *model.RateLimitingLi
 		return nil
 	}
 	return &model.RateLimitingLimitConfig{
-		RequestCount:         in.RequestCount,
-		RequestResetDuration: in.RequestResetDuration,
-		RequestResetUnit:     in.RequestResetUnit,
-		TokenCount:           in.TokenCount,
-		TokenResetDuration:   in.TokenResetDuration,
-		TokenResetUnit:       in.TokenResetUnit,
-		Cost:                 in.Cost,
-		CostResetDuration:    in.CostResetDuration,
-		CostResetUnit:        in.CostResetUnit,
+		Request: mapRequestRateLimit(in.Request),
+		Token:   mapTokenRateLimit(in.Token),
+		Cost:    mapCostRateLimit(in.Cost),
+	}
+}
+
+func mapRequestRateLimit(in *dto.RequestRateLimit) *model.RequestRateLimit {
+	if in == nil {
+		return nil
+	}
+	return &model.RequestRateLimit{
+		Enabled: in.Enabled,
+		Count:   in.Count,
+		Reset:   mapRateLimitResetWindow(in.Reset),
+	}
+}
+
+func mapTokenRateLimit(in *dto.TokenRateLimit) *model.TokenRateLimit {
+	if in == nil {
+		return nil
+	}
+	return &model.TokenRateLimit{
+		Enabled: in.Enabled,
+		Count:   in.Count,
+		Reset:   mapRateLimitResetWindow(in.Reset),
+	}
+}
+
+func mapCostRateLimit(in *dto.CostRateLimit) *model.CostRateLimit {
+	if in == nil {
+		return nil
+	}
+	return &model.CostRateLimit{
+		Enabled: in.Enabled,
+		Amount:  in.Amount,
+		Reset:   mapRateLimitResetWindow(in.Reset),
+	}
+}
+
+func mapRateLimitResetWindow(in dto.RateLimitResetWindow) model.RateLimitResetWindow {
+	return model.RateLimitResetWindow{
+		Duration: in.Duration,
+		Unit:     in.Unit,
 	}
 }
 
@@ -923,9 +957,9 @@ func mapTemplateMetadata(in *dto.LLMProviderTemplateMetadata) *model.LLMProvider
 		}
 	}
 	out := &model.LLMProviderTemplateMetadata{
-		EndpointURL: strings.TrimSpace(in.EndpointURL),
-		Auth:        auth,
-		LogoURL:     strings.TrimSpace(in.LogoURL),
+		EndpointURL:    strings.TrimSpace(in.EndpointURL),
+		Auth:           auth,
+		LogoURL:        strings.TrimSpace(in.LogoURL),
 		OpenapiSpecURL: strings.TrimSpace(in.OpenapiSpecURL),
 	}
 	if out.EndpointURL == "" && out.LogoURL == "" && out.Auth == nil && out.OpenapiSpecURL == "" {
@@ -947,9 +981,9 @@ func mapTemplateMetadataDTO(in *model.LLMProviderTemplateMetadata) *dto.LLMProvi
 		}
 	}
 	return &dto.LLMProviderTemplateMetadata{
-		EndpointURL: in.EndpointURL,
-		Auth:        auth,
-		LogoURL:     in.LogoURL,
+		EndpointURL:    in.EndpointURL,
+		Auth:           auth,
+		LogoURL:        in.LogoURL,
 		OpenapiSpecURL: in.OpenapiSpecURL,
 	}
 }
@@ -1131,15 +1165,49 @@ func mapRateLimitingLimitDTO(in *model.RateLimitingLimitConfig) *dto.RateLimitin
 		return nil
 	}
 	return &dto.RateLimitingLimitConfig{
-		RequestCount:         in.RequestCount,
-		RequestResetDuration: in.RequestResetDuration,
-		RequestResetUnit:     in.RequestResetUnit,
-		TokenCount:           in.TokenCount,
-		TokenResetDuration:   in.TokenResetDuration,
-		TokenResetUnit:       in.TokenResetUnit,
-		Cost:                 in.Cost,
-		CostResetDuration:    in.CostResetDuration,
-		CostResetUnit:        in.CostResetUnit,
+		Request: mapRequestRateLimitDTO(in.Request),
+		Token:   mapTokenRateLimitDTO(in.Token),
+		Cost:    mapCostRateLimitDTO(in.Cost),
+	}
+}
+
+func mapRequestRateLimitDTO(in *model.RequestRateLimit) *dto.RequestRateLimit {
+	if in == nil {
+		return nil
+	}
+	return &dto.RequestRateLimit{
+		Enabled: in.Enabled,
+		Count:   in.Count,
+		Reset:   mapRateLimitResetWindowDTO(in.Reset),
+	}
+}
+
+func mapTokenRateLimitDTO(in *model.TokenRateLimit) *dto.TokenRateLimit {
+	if in == nil {
+		return nil
+	}
+	return &dto.TokenRateLimit{
+		Enabled: in.Enabled,
+		Count:   in.Count,
+		Reset:   mapRateLimitResetWindowDTO(in.Reset),
+	}
+}
+
+func mapCostRateLimitDTO(in *model.CostRateLimit) *dto.CostRateLimit {
+	if in == nil {
+		return nil
+	}
+	return &dto.CostRateLimit{
+		Enabled: in.Enabled,
+		Amount:  in.Amount,
+		Reset:   mapRateLimitResetWindowDTO(in.Reset),
+	}
+}
+
+func mapRateLimitResetWindowDTO(in model.RateLimitResetWindow) dto.RateLimitResetWindow {
+	return dto.RateLimitResetWindow{
+		Duration: in.Duration,
+		Unit:     in.Unit,
 	}
 }
 
@@ -1152,29 +1220,17 @@ func mapResourceWiseRateLimitingDTO(in *model.ResourceWiseRateLimitingConfig) *d
 		resources = append(resources, dto.RateLimitingResourceLimit{
 			Resource: r.Resource,
 			Limit: dto.RateLimitingLimitConfig{
-				RequestCount:         r.Limit.RequestCount,
-				RequestResetDuration: r.Limit.RequestResetDuration,
-				RequestResetUnit:     r.Limit.RequestResetUnit,
-				TokenCount:           r.Limit.TokenCount,
-				TokenResetDuration:   r.Limit.TokenResetDuration,
-				TokenResetUnit:       r.Limit.TokenResetUnit,
-				Cost:                 r.Limit.Cost,
-				CostResetDuration:    r.Limit.CostResetDuration,
-				CostResetUnit:        r.Limit.CostResetUnit,
+				Request: mapRequestRateLimitDTO(r.Limit.Request),
+				Token:   mapTokenRateLimitDTO(r.Limit.Token),
+				Cost:    mapCostRateLimitDTO(r.Limit.Cost),
 			},
 		})
 	}
 	return &dto.ResourceWiseRateLimitingConfig{
 		Default: dto.RateLimitingLimitConfig{
-			RequestCount:         in.Default.RequestCount,
-			RequestResetDuration: in.Default.RequestResetDuration,
-			RequestResetUnit:     in.Default.RequestResetUnit,
-			TokenCount:           in.Default.TokenCount,
-			TokenResetDuration:   in.Default.TokenResetDuration,
-			TokenResetUnit:       in.Default.TokenResetUnit,
-			Cost:                 in.Default.Cost,
-			CostResetDuration:    in.Default.CostResetDuration,
-			CostResetUnit:        in.Default.CostResetUnit,
+			Request: mapRequestRateLimitDTO(in.Default.Request),
+			Token:   mapTokenRateLimitDTO(in.Default.Token),
+			Cost:    mapCostRateLimitDTO(in.Default.Cost),
 		},
 		Resources: resources,
 	}
@@ -1228,34 +1284,35 @@ func validateRateLimitingLimit(cfg *dto.RateLimitingLimitConfig) error {
 	if cfg == nil {
 		return constants.ErrInvalidInput
 	}
-	if cfg.RequestCount <= 0 || cfg.RequestResetDuration <= 0 {
-		return constants.ErrInvalidInput
+	requestEnabled := cfg.Request != nil && cfg.Request.Enabled
+	tokenEnabled := cfg.Token != nil && cfg.Token.Enabled
+	costEnabled := cfg.Cost != nil && cfg.Cost.Enabled
+
+	if !requestEnabled && !tokenEnabled && !costEnabled {
+		return nil
 	}
-	if !isValidResetUnit(cfg.RequestResetUnit) {
-		return constants.ErrInvalidInput
-	}
-	if (cfg.TokenCount == nil && cfg.Cost == nil) || (cfg.TokenCount != nil && cfg.Cost != nil) {
-		return constants.ErrInvalidInput
-	}
-	if cfg.TokenCount != nil {
-		if *cfg.TokenCount <= 0 {
+
+	if requestEnabled {
+		if cfg.Request.Count <= 0 || cfg.Request.Reset.Duration <= 0 {
 			return constants.ErrInvalidInput
 		}
-		if cfg.TokenResetDuration == nil || *cfg.TokenResetDuration <= 0 {
-			return constants.ErrInvalidInput
-		}
-		if cfg.TokenResetUnit == nil || !isValidResetUnit(*cfg.TokenResetUnit) {
+		if !isValidResetUnit(cfg.Request.Reset.Unit) {
 			return constants.ErrInvalidInput
 		}
 	}
-	if cfg.Cost != nil {
-		if *cfg.Cost < 0 {
+	if tokenEnabled {
+		if cfg.Token.Count <= 0 || cfg.Token.Reset.Duration <= 0 {
 			return constants.ErrInvalidInput
 		}
-		if cfg.CostResetDuration == nil || *cfg.CostResetDuration <= 0 {
+		if !isValidResetUnit(cfg.Token.Reset.Unit) {
 			return constants.ErrInvalidInput
 		}
-		if cfg.CostResetUnit == nil || !isValidResetUnit(*cfg.CostResetUnit) {
+	}
+	if costEnabled {
+		if cfg.Cost.Amount < 0 || cfg.Cost.Reset.Duration <= 0 {
+			return constants.ErrInvalidInput
+		}
+		if !isValidResetUnit(cfg.Cost.Reset.Unit) {
 			return constants.ErrInvalidInput
 		}
 	}
