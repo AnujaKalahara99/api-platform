@@ -39,6 +39,7 @@ build: ## Build Gateway Runtime Docker image using buildx
 	@mkdir -p target && cp ../build.yaml target/
 	docker buildx build -f Dockerfile \
 		--build-context sdk=../../sdk \
+		--build-context common=../../common \
 		--build-context gateway-builder=../gateway-builder \
 		--build-context system-policies=../system-policies \
 		--build-context dev-policies=../dev-policies \
@@ -57,6 +58,7 @@ build-local: ## Build Gateway Runtime Docker image locally (faster, no buildx)
 	@mkdir -p target && cp ../build.yaml target/
 	DOCKER_BUILDKIT=1 docker build -f Dockerfile \
 		--build-context sdk=../../sdk \
+		--build-context common=../../common \
 		--build-context gateway-builder=../gateway-builder \
 		--build-context system-policies=../system-policies \
 		--build-context dev-policies=../dev-policies \
@@ -74,6 +76,7 @@ build-coverage-image: ## Build Gateway Runtime Docker image with coverage instru
 	@mkdir -p target && cp ../build.yaml target/
 	DOCKER_BUILDKIT=1 docker build -f Dockerfile \
 		--build-context sdk=../../sdk \
+		--build-context common=../../common \
 		--build-context gateway-builder=../gateway-builder \
 		--build-context system-policies=../system-policies \
 		--build-context dev-policies=../dev-policies \
@@ -96,6 +99,7 @@ build-and-push-multiarch: ## Build and push Gateway Runtime Docker image for mul
 	@mkdir -p target && cp ../build.yaml target/
 	docker buildx build -f Dockerfile \
 		--build-context sdk=../../sdk \
+		--build-context common=../../common \
 		--build-context gateway-builder=../gateway-builder \
 		--build-context system-policies=../system-policies \
 		--build-context dev-policies=../dev-policies \

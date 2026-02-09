@@ -20,24 +20,32 @@ package xdsclient
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"os"
 	"testing"
 	"time"
 
-	policy "github.com/wso2/api-platform/sdk/gateway/policy/v1alpha"
-	policyenginev1 "github.com/wso2/api-platform/sdk/gateway/policyengine/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wso2/api-platform/common/apikey"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// computeTestIndexKey computes SHA-256 hash of a plain-text key for external key lookup
+func computeTestIndexKey(plainKey string) string {
+	hasher := sha256.New()
+	hasher.Write([]byte(plainKey))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
+
 // Helper to create a fresh API key store for each test
-func createTestAPIKeyStore() *policy.APIkeyStore {
-	return policy.NewAPIkeyStore()
+func createTestAPIKeyStore() *apikey.APIkeyStore {
+	return apikey.NewAPIkeyStore()
 }
 
 // Test helper functions to create test data
@@ -55,11 +63,13 @@ func createValidAPIKeyStateResource(t *testing.T) *anypb.Any {
 				Name:       "test-key",
 				APIKey:     "test-api-key-value",
 				APIId:      "api-1",
-				Operations: "*",
+				Operations: `["*"]`,
 				Status:     "active",
 				CreatedAt:  time.Now(),
 				CreatedBy:  "admin",
 				UpdatedAt:  time.Now(),
+				Source:     "external",
+				IndexKey:   computeTestIndexKey("test-api-key-value"),
 			},
 		},
 	}
@@ -180,53 +190,10 @@ func TestHandleAPIKeyOperation_UnmarshalStructFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to unmarshal api keys struct from inner Any")
 }
 
-// TestHandleAPIKeyOperation_JSONUnmarshalFails tests that JSON unmarshal errors are logged but don't stop processing
-func TestHandleAPIKeyOperation_JSONUnmarshalFails(t *testing.T) {
+// TestHandleAPIKeyOperation_ValidResource tests successful processing of valid API key state
+func TestHandleAPIKeyOperation_ValidResource(t *testing.T) {
 	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	ctx := context.Background()
-
-	// Create a Struct with invalid JSON structure (missing required fields)
-	invalidStruct, err := structpb.NewStruct(map[string]interface{}{
-		"invalid": "data",
-	})
-	require.NoError(t, err)
-
-	structBytes, err := proto.Marshal(invalidStruct)
-	require.NoError(t, err)
-
-	innerAny := &anypb.Any{
-		TypeUrl: "type.googleapis.com/google.protobuf.Struct",
-		Value:   structBytes,
-	}
-
-	innerAnyBytes, err := proto.Marshal(innerAny)
-	require.NoError(t, err)
-
-	outerAny := &anypb.Any{
-		TypeUrl: APIKeyStateTypeURL,
-		Value:   innerAnyBytes,
-	}
-
-	resources := map[string]*anypb.Any{
-		"resource-1": outerAny,
-	}
-
-	// Should not return error, just log and continue
-	err = handler.HandleAPIKeyOperation(ctx, resources)
-	assert.NoError(t, err)
-}
-
-// TestHandleAPIKeyOperation_ReplaceAllFails tests that replaceAllAPIKeys errors are logged
-// Note: Testing replaceAllAPIKeys failure is challenging with the real store as it doesn't fail easily.
-// This test is omitted as the real store's ClearAll and StoreAPIKey are highly reliable.
-
-// TestHandleAPIKeyOperation_Success tests successful processing
-func TestHandleAPIKeyOperation_Success(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	handler := NewAPIKeyOperationHandler(store, logger)
 
 	ctx := context.Background()
@@ -236,310 +203,94 @@ func TestHandleAPIKeyOperation_Success(t *testing.T) {
 
 	err := handler.HandleAPIKeyOperation(ctx, resources)
 	assert.NoError(t, err)
-	
-	// Verify the key was stored - the store doesn't have a direct Get method,
-	// but we can verify by attempting validation
-	// Since we don't have direct access to verify storage, we'll just ensure no error
-}
 
-// TestProcessAPIKeyOperation_StoreOperation tests Store operation dispatching
-func TestProcessAPIKeyOperation_StoreOperation(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	now := time.Now()
-	operation := policyenginev1.APIKeyOperation{
-		Operation: policyenginev1.APIKeyOperationStore,
-		APIId:     "api-1",
-		APIKey: &policyenginev1.APIKeyData{
-			ID:         "key-1",
-			Name:       "test-key",
-			APIKey:     "test-value",
-			APIId:      "api-1",
-			Operations: "*",
-			Status:     "active",
-			CreatedAt:  now,
-			CreatedBy:  "admin",
-			UpdatedAt:  now,
-		},
-	}
-
-	err := handler.processAPIKeyOperation(operation)
+	// Verify the API key was stored
+	valid, err := store.ValidateAPIKey("api-1", "*", "GET", "test-api-key-value")
 	assert.NoError(t, err)
+	assert.True(t, valid)
 }
 
-// TestProcessAPIKeyOperation_RevokeOperation tests Revoke operation dispatching
-func TestProcessAPIKeyOperation_RevokeOperation(t *testing.T) {
+// TestReplaceAllAPIKeys_ClearsExistingKeys tests that replaceAllAPIKeys clears existing keys first
+func TestReplaceAllAPIKeys_ClearsExistingKeys(t *testing.T) {
 	store := createTestAPIKeyStore()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	handler := NewAPIKeyOperationHandler(store, logger)
 
-	operation := policyenginev1.APIKeyOperation{
-		Operation:   policyenginev1.APIKeyOperationRevoke,
-		APIId:       "api-1",
-		APIKeyValue: "test-key-value",
+	// Pre-populate with an existing key
+	existingKey := &apikey.APIKey{
+		ID:         "old-key",
+		Name:       "old-key-name",
+		APIKey:     "old-api-key-value",
+		APIId:      "api-1",
+		Operations: `["*"]`,
+		Status:     apikey.Active,
+		CreatedAt:  time.Now(),
+		CreatedBy:  "admin",
+		UpdatedAt:  time.Now(),
+		Source:     "external",
+		IndexKey:   computeTestIndexKey("old-api-key-value"),
 	}
+	err := store.StoreAPIKey("api-1", existingKey)
+	require.NoError(t, err)
 
-	err := handler.processAPIKeyOperation(operation)
-	assert.NoError(t, err)
-}
-
-// TestProcessAPIKeyOperation_RemoveByAPIOperation tests RemoveByAPI operation dispatching
-func TestProcessAPIKeyOperation_RemoveByAPIOperation(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	operation := policyenginev1.APIKeyOperation{
-		Operation: policyenginev1.APIKeyOperationRemoveByAPI,
-		APIId:     "api-1",
-	}
-
-	err := handler.processAPIKeyOperation(operation)
-	assert.NoError(t, err)
-}
-
-// TestProcessAPIKeyOperation_UnknownOperation tests error for unknown operation
-func TestProcessAPIKeyOperation_UnknownOperation(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	operation := policyenginev1.APIKeyOperation{
-		Operation: "UNKNOWN_OPERATION",
-		APIId:     "api-1",
-	}
-
-	err := handler.processAPIKeyOperation(operation)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown API key operation")
-}
-
-// TestHandleStoreOperation_Success tests successful store operation
-func TestHandleStoreOperation_Success(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	now := time.Now()
-	operation := policyenginev1.APIKeyOperation{
-		Operation: policyenginev1.APIKeyOperationStore,
-		APIId:     "api-1",
-		APIKey: &policyenginev1.APIKeyData{
-			ID:         "key-1",
-			Name:       "test-key",
-			APIKey:     "test-value",
-			APIId:      "api-1",
-			Operations: "*",
-			Status:     "active",
-			CreatedAt:  now,
-			CreatedBy:  "admin",
-			UpdatedAt:  now,
-		},
-	}
-
-	err := handler.handleStoreOperation(operation)
-	assert.NoError(t, err)
-}
-
-// TestHandleStoreOperation_NilAPIKey tests error when API key is nil
-func TestHandleStoreOperation_NilAPIKey(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	operation := policyenginev1.APIKeyOperation{
-		Operation: policyenginev1.APIKeyOperationStore,
-		APIId:     "api-1",
-		APIKey:    nil,
-	}
-
-	err := handler.handleStoreOperation(operation)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "API key data is required")
-}
-
-// TestHandleStoreOperation_StoreFailure tests error when store fails
-// Note: The real APIkeyStore rarely fails, so this test covers the error path conceptually
-// by documenting the expected behavior when a store error occurs.
-func TestHandleStoreOperation_StoreFailure(t *testing.T) {
-	// This test is more conceptual since the real store doesn't easily produce errors
-	// The error handling code path exists in handleStoreOperation for future-proofing
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	now := time.Now()
-	
-	// First, add a key with the same ID
-	firstOp := policyenginev1.APIKeyOperation{
-		Operation: policyenginev1.APIKeyOperationStore,
-		APIId:     "api-1",
-		APIKey: &policyenginev1.APIKeyData{
-			ID:         "key-1",
-			Name:       "first-key",
-			APIKey:     "value-1",
-			APIId:      "api-1",
-			Operations: "*",
-			Status:     "active",
-			CreatedAt:  now,
-			CreatedBy:  "admin",
-			UpdatedAt:  now,
-		},
-	}
-	
-	err := handler.handleStoreOperation(firstOp)
-	assert.NoError(t, err)
-	
-	// Now try to add another key with same ID but different name
-	// This should trigger ErrConflict from the store
-	secondOp := policyenginev1.APIKeyOperation{
-		Operation: policyenginev1.APIKeyOperationStore,
-		APIId:     "api-1",
-		APIKey: &policyenginev1.APIKeyData{
-			ID:         "key-1",
-			Name:       "second-key", // Different name
-			APIKey:     "value-2",
-			APIId:      "api-1",
-			Operations: "*",
-			Status:     "active",
-			CreatedAt:  now,
-			CreatedBy:  "admin",
-			UpdatedAt:  now,
-		},
-	}
-	
-	err = handler.handleStoreOperation(secondOp)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to store API key in store")
-}
-
-// TestHandleRevokeOperation_Success tests successful revoke operation
-func TestHandleRevokeOperation_Success(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	operation := policyenginev1.APIKeyOperation{
-		Operation:   policyenginev1.APIKeyOperationRevoke,
-		APIId:       "api-1",
-		APIKeyValue: "test-key-value",
-	}
-
-	err := handler.handleRevokeOperation(operation)
-	assert.NoError(t, err)
-}
-
-// TestHandleRevokeOperation_EmptyKeyValue tests error when key value is empty
-func TestHandleRevokeOperation_EmptyKeyValue(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	operation := policyenginev1.APIKeyOperation{
-		Operation:   policyenginev1.APIKeyOperationRevoke,
-		APIId:       "api-1",
-		APIKeyValue: "",
-	}
-
-	err := handler.handleRevokeOperation(operation)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "API key value is required")
-}
-
-// TestHandleRevokeOperation_RevokeFailure is conceptual - real store doesn't easily fail
-// The error path exists for robustness but is challenging to trigger in unit tests
-
-// TestHandleRemoveByAPIOperation_Success tests successful remove by API operation
-func TestHandleRemoveByAPIOperation_Success(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	operation := policyenginev1.APIKeyOperation{
-		Operation: policyenginev1.APIKeyOperationRemoveByAPI,
-		APIId:     "api-1",
-	}
-
-	err := handler.handleRemoveByAPIOperation(operation)
-	assert.NoError(t, err)
-}
-
-// TestHandleRemoveByAPIOperation_RemoveFailure is conceptual - real store doesn't easily fail
-// The error path exists for robustness but is challenging to trigger in unit tests
-
-// TestReplaceAllAPIKeys_Success tests successful state replacement
-func TestReplaceAllAPIKeys_Success(t *testing.T) {
-	store := createTestAPIKeyStore()
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	handler := NewAPIKeyOperationHandler(store, logger)
-
-	apiKeyDataList := []APIKeyData{
+	// Replace with new keys
+	newKeys := []APIKeyData{
 		{
-			ID:         "key-1",
-			Name:       "test-key-1",
-			APIKey:     "test-value-1",
+			ID:         "new-key",
+			Name:       "new-key-name",
+			APIKey:     "new-api-key-value",
 			APIId:      "api-1",
-			Operations: "*",
+			Operations: `["*"]`,
 			Status:     "active",
 			CreatedAt:  time.Now(),
 			CreatedBy:  "admin",
 			UpdatedAt:  time.Now(),
-		},
-		{
-			ID:         "key-2",
-			Name:       "test-key-2",
-			APIKey:     "test-value-2",
-			APIId:      "api-2",
-			Operations: "*",
-			Status:     "active",
-			CreatedAt:  time.Now(),
-			CreatedBy:  "admin",
-			UpdatedAt:  time.Now(),
+			Source:     "external",
+			IndexKey:   computeTestIndexKey("new-api-key-value"),
 		},
 	}
 
-	err := handler.replaceAllAPIKeys(apiKeyDataList)
+	err = handler.replaceAllAPIKeys(newKeys)
 	assert.NoError(t, err)
+
+	// Old key should no longer be valid
+	valid, _ := store.ValidateAPIKey("api-1", "*", "GET", "old-api-key-value")
+	assert.False(t, valid)
+
+	// New key should be valid
+	valid, err = store.ValidateAPIKey("api-1", "*", "GET", "new-api-key-value")
+	assert.NoError(t, err)
+	assert.True(t, valid)
 }
 
-// TestReplaceAllAPIKeys_ClearFails - conceptual test since real store rarely fails
-// The error handling exists for robustness
-
-// TestReplaceAllAPIKeys_StoreFailsMidLoop tests error when store fails on conflicting key
-func TestReplaceAllAPIKeys_StoreFailsMidLoop(t *testing.T) {
+// TestReplaceAllAPIKeys_EmptyList tests replacing with an empty list clears all keys
+func TestReplaceAllAPIKeys_EmptyList(t *testing.T) {
 	store := createTestAPIKeyStore()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	handler := NewAPIKeyOperationHandler(store, logger)
 
-	// Create list with duplicate key IDs for same API - will cause conflict
-	apiKeyDataList := []APIKeyData{
-		{
-			ID:         "key-1",
-			Name:       "test-key-1",
-			APIKey:     "test-value-1",
-			APIId:      "api-1",
-			Operations: "*",
-			Status:     "active",
-			CreatedAt:  time.Now(),
-			CreatedBy:  "admin",
-			UpdatedAt:  time.Now(),
-		},
-		{
-			ID:         "key-1", // Same ID, different name - will cause conflict
-			Name:       "test-key-2",
-			APIKey:     "test-value-2",
-			APIId:      "api-1", // Same API
-			Operations: "*",
-			Status:     "active",
-			CreatedAt:  time.Now(),
-			CreatedBy:  "admin",
-			UpdatedAt:  time.Now(),
-		},
+	// Pre-populate
+	existingKey := &apikey.APIKey{
+		ID:         "key-1",
+		Name:       "key-name",
+		APIKey:     "api-key-value",
+		APIId:      "api-1",
+		Operations: `["*"]`,
+		Status:     apikey.Active,
+		CreatedAt:  time.Now(),
+		CreatedBy:  "admin",
+		UpdatedAt:  time.Now(),
+		Source:     "external",
+		IndexKey:   computeTestIndexKey("api-key-value"),
 	}
+	err := store.StoreAPIKey("api-1", existingKey)
+	require.NoError(t, err)
 
-	err := handler.replaceAllAPIKeys(apiKeyDataList)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to store API key key-1")
+	// Replace with empty list
+	err = handler.replaceAllAPIKeys([]APIKeyData{})
+	assert.NoError(t, err)
+
+	// Key should no longer be valid
+	valid, _ := store.ValidateAPIKey("api-1", "*", "GET", "api-key-value")
+	assert.False(t, valid)
 }

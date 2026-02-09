@@ -241,7 +241,7 @@ services:
     ports:
       - "9082:8080"
     networks:
-      - it-gateway-network
+      - it-gateway-runtime-network
 
 volumes:
   controller-data-tests:

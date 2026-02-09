@@ -74,6 +74,18 @@ ENV VERSION=${VERSION}
 ENV GIT_COMMIT=${GIT_COMMIT}
 ENV BUILD_DATE=${BUILD_DATE}
 
+# Download SDK dependencies (cached by go.mod/go.sum changes)
+COPY --from=sdk go.mod go.sum /api-platform/sdk/
+WORKDIR /api-platform/sdk
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Download common dependencies (cached by go.mod/go.sum changes)
+COPY --from=common go.mod go.sum /api-platform/common/
+WORKDIR /api-platform/common
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
 # Download policy-engine dependencies (cached by go.mod/go.sum changes)
 WORKDIR /api-platform/gateway/gateway-runtime/policy-engine
 COPY policy-engine/go.mod policy-engine/go.sum ./
@@ -83,6 +95,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # Copy all source and policy files
 COPY policy-engine/ /api-platform/gateway/gateway-runtime/policy-engine/
 COPY --from=sdk . /api-platform/sdk
+COPY --from=common . /api-platform/common
 COPY --from=system-policies . /workspace/system-policies/
 COPY --from=dev-policies . /workspace/policies/dev-policies/
 COPY --from=target build.yaml /workspace/policies/policy-manifest.yaml

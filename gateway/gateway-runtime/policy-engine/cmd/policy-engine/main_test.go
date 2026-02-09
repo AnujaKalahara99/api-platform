@@ -29,9 +29,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/wso2/api-platform/gateway/policy-engine/internal/config"
-	"github.com/wso2/api-platform/gateway/policy-engine/internal/kernel"
-	"github.com/wso2/api-platform/gateway/policy-engine/internal/registry"
+	"github.com/wso2/api-platform/gateway/gateway-runtime/policy-engine/internal/config"
+	"github.com/wso2/api-platform/gateway/gateway-runtime/policy-engine/internal/kernel"
+	"github.com/wso2/api-platform/gateway/gateway-runtime/policy-engine/internal/registry"
 )
 
 // =============================================================================
@@ -63,25 +63,6 @@ func TestApplyFlagOverrides_PolicyChainsFile(t *testing.T) {
 	assert.False(t, cfg.PolicyEngine.XDS.Enabled)
 }
 
-func TestApplyFlagOverrides_XDSServerAddr(t *testing.T) {
-	cfg := &config.Config{
-		PolicyEngine: config.PolicyEngine{
-			XDS: config.XDSConfig{
-				ServerAddress: "default:18000",
-			},
-		},
-	}
-
-	testAddr := "custom:19000"
-	oldXdsServerAddr := *xdsServerAddr
-	*xdsServerAddr = testAddr
-	defer func() { *xdsServerAddr = oldXdsServerAddr }()
-
-	applyFlagOverrides(cfg)
-
-	assert.Equal(t, testAddr, cfg.PolicyEngine.XDS.ServerAddress)
-}
-
 func TestApplyFlagOverrides_XDSNodeID(t *testing.T) {
 	cfg := &config.Config{
 		PolicyEngine: config.PolicyEngine{
@@ -108,9 +89,8 @@ func TestApplyFlagOverrides_NoFlags(t *testing.T) {
 				Mode: "xds",
 			},
 			XDS: config.XDSConfig{
-				ServerAddress: "default:18000",
-				NodeID:        "default-node",
-				Enabled:       true,
+				NodeID:  "default-node",
+				Enabled: true,
 			},
 		},
 	}
@@ -132,7 +112,6 @@ func TestApplyFlagOverrides_NoFlags(t *testing.T) {
 
 	// Config should remain unchanged
 	assert.Equal(t, "xds", cfg.PolicyEngine.ConfigMode.Mode)
-	assert.Equal(t, "default:18000", cfg.PolicyEngine.XDS.ServerAddress)
 	assert.Equal(t, "default-node", cfg.PolicyEngine.XDS.NodeID)
 	assert.True(t, cfg.PolicyEngine.XDS.Enabled)
 }
@@ -341,7 +320,6 @@ func TestInitializeXDSClient_InvalidConfig(t *testing.T) {
 	cfg := &config.Config{
 		PolicyEngine: config.PolicyEngine{
 			XDS: config.XDSConfig{
-				ServerAddress:         "", // Missing required field
 				NodeID:                "",
 				ConnectTimeout:        5 * time.Second,
 				RequestTimeout:        5 * time.Second,
@@ -351,7 +329,7 @@ func TestInitializeXDSClient_InvalidConfig(t *testing.T) {
 		},
 	}
 
-	_, err := initializeXDSClient(context.Background(), cfg, k, reg)
+	_, err := initializeXDSClient(context.Background(), cfg, "", k, reg)
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create xDS client")
@@ -364,7 +342,6 @@ func TestInitializeXDSClient_ValidConfig(t *testing.T) {
 	cfg := &config.Config{
 		PolicyEngine: config.PolicyEngine{
 			XDS: config.XDSConfig{
-				ServerAddress:         "localhost:18000",
 				NodeID:                "test-node",
 				Cluster:               "test-cluster",
 				ConnectTimeout:        1 * time.Second,
@@ -380,7 +357,7 @@ func TestInitializeXDSClient_ValidConfig(t *testing.T) {
 
 	// Note: This will fail to actually connect since there's no server,
 	// but the client creation and start attempt should work
-	client, err := initializeXDSClient(context.Background(), cfg, k, reg)
+	client, err := initializeXDSClient(context.Background(), cfg, "localhost:18000", k, reg)
 
 	// Client should be created successfully even if it can't connect
 	require.NoError(t, err)

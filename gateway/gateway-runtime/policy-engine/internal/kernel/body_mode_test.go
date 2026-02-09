@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/wso2/api-platform/gateway/policy-engine/internal/registry"
+	"github.com/wso2/api-platform/gateway/gateway-runtime/policy-engine/internal/registry"
 	policy "github.com/wso2/api-platform/sdk/gateway/policy/v1alpha"
 )
 
