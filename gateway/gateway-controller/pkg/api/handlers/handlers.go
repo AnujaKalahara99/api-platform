@@ -93,6 +93,8 @@ func NewAPIServer(
 	systemConfig *config.Config,
 ) *APIServer {
 	deploymentService := utils.NewAPIDeploymentService(store, db, snapshotManager, validator, &systemConfig.GatewayController.Router)
+	policyVersionResolver := utils.NewLoadedPolicyVersionResolver(policyDefinitions)
+	policyValidator := config.NewPolicyValidator(policyDefinitions)
 	server := &APIServer{
 		store:                store,
 		db:                   db,
@@ -105,7 +107,7 @@ func NewAPIServer(
 		deploymentService:    deploymentService,
 		mcpDeploymentService: utils.NewMCPDeploymentService(store, db, snapshotManager),
 		llmDeploymentService: utils.NewLLMDeploymentService(store, db, snapshotManager, lazyResourceManager, templateDefinitions,
-			deploymentService, &systemConfig.GatewayController.Router),
+			deploymentService, &systemConfig.GatewayController.Router, policyVersionResolver, policyValidator),
 		apiKeyService: utils.NewAPIKeyService(store, db, apiKeyXDSManager,
 			&systemConfig.GatewayController.APIKey),
 		apiKeyXDSManager:   apiKeyXDSManager,
@@ -1226,6 +1228,13 @@ func (s *APIServer) CreateLLMProvider(c *gin.Context) {
 	})
 	if err != nil {
 		log.Error("Failed to create LLM provider", slog.Any("error", err))
+		if utils.IsPolicyDefinitionMissingError(err) {
+			c.JSON(http.StatusInternalServerError, api.ErrorResponse{
+				Status:  "error",
+				Message: utils.PolicyDefinitionMissingUserMessage,
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, api.ErrorResponse{Status: "error", Message: err.Error()})
 		return
 	}
@@ -1324,6 +1333,13 @@ func (s *APIServer) UpdateLLMProvider(c *gin.Context, id string) {
 	})
 	if err != nil {
 		log.Error("Failed to update LLM provider configuration", slog.Any("error", err))
+		if utils.IsPolicyDefinitionMissingError(err) {
+			c.JSON(http.StatusInternalServerError, api.ErrorResponse{
+				Status:  "error",
+				Message: utils.PolicyDefinitionMissingUserMessage,
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, api.ErrorResponse{Status: "error", Message: err.Error()})
 		return
 	}
@@ -1463,6 +1479,13 @@ func (s *APIServer) CreateLLMProxy(c *gin.Context) {
 	})
 	if err != nil {
 		log.Error("Failed to create LLM proxy", slog.Any("error", err))
+		if utils.IsPolicyDefinitionMissingError(err) {
+			c.JSON(http.StatusInternalServerError, api.ErrorResponse{
+				Status:  "error",
+				Message: utils.PolicyDefinitionMissingUserMessage,
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, api.ErrorResponse{Status: "error", Message: err.Error()})
 		return
 	}
@@ -1561,6 +1584,13 @@ func (s *APIServer) UpdateLLMProxy(c *gin.Context, id string) {
 	})
 	if err != nil {
 		log.Error("Failed to update LLM proxy configuration", slog.Any("error", err))
+		if utils.IsPolicyDefinitionMissingError(err) {
+			c.JSON(http.StatusInternalServerError, api.ErrorResponse{
+				Status:  "error",
+				Message: utils.PolicyDefinitionMissingUserMessage,
+			})
+			return
+		}
 		c.JSON(http.StatusBadRequest, api.ErrorResponse{Status: "error", Message: err.Error()})
 		return
 	}
