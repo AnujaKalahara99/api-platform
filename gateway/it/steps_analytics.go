@@ -32,8 +32,9 @@ import (
 
 // AnalyticsSteps wraps TestState and HTTPSteps for analytics step definitions
 type AnalyticsSteps struct {
-	state     *TestState
-	httpSteps *steps.HTTPSteps
+	state            *TestState
+	httpSteps        *steps.HTTPSteps
+	lastMatchedEvent *AnalyticsEvent // Stores the last matched event for validation steps
 }
 
 // AnalyticsEvent represents the structure of a Moesif analytics event
@@ -71,25 +72,28 @@ func RegisterAnalyticsSteps(ctx *godog.ScenarioContext, state *TestState, httpSt
 
 // iResetTheAnalyticsCollector resets all events in the mock analytics collector
 func (a *AnalyticsSteps) iResetTheAnalyticsCollector() error {
+	// Clear the last matched event for test isolation
+	a.lastMatchedEvent = nil
+
 	url := fmt.Sprintf("http://localhost:8086/test/reset")
-	
+
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create reset request: %w", err)
 	}
-	
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to reset analytics collector: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("reset failed with status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
@@ -218,6 +222,9 @@ func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestURI(expectedURI
 		return err
 	}
 
+	// Store the matched event for subsequent validation steps
+	a.lastMatchedEvent = event
+
 	// URI may include query params, check if it contains the expected path
 	if !strings.Contains(event.Request.URI, expectedURI) {
 		return fmt.Errorf("expected URI to contain '%s', but got '%s'", expectedURI, event.Request.URI)
@@ -228,13 +235,13 @@ func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestURI(expectedURI
 
 // theLatestAnalyticsEventShouldHaveRequestMethod verifies the request method in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestMethod(expectedMethod string) error {
-	event, err := a.getLatestAnalyticsEvent("") // Empty filter
-	if err != nil {
-		return err
+	// Use the last matched event from the URI validation step
+	if a.lastMatchedEvent == nil {
+		return fmt.Errorf("no event has been matched yet - ensure URI validation step runs first")
 	}
 
-	if event.Request.Verb != expectedMethod {
-		return fmt.Errorf("expected method '%s', but got '%s'", expectedMethod, event.Request.Verb)
+	if a.lastMatchedEvent.Request.Verb != expectedMethod {
+		return fmt.Errorf("expected method '%s', but got '%s'", expectedMethod, a.lastMatchedEvent.Request.Verb)
 	}
 
 	return nil
@@ -242,13 +249,13 @@ func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestMethod(expected
 
 // theLatestAnalyticsEventShouldHaveResponseStatus verifies the response status in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveResponseStatus(expectedStatus int) error {
-	event, err := a.getLatestAnalyticsEvent("") // Empty filter
-	if err != nil {
-		return err
+	// Use the last matched event from the URI validation step
+	if a.lastMatchedEvent == nil {
+		return fmt.Errorf("no event has been matched yet - ensure URI validation step runs first")
 	}
 
-	if event.Response.Status != expectedStatus {
-		return fmt.Errorf("expected status %d, but got %d", expectedStatus, event.Response.Status)
+	if a.lastMatchedEvent.Response.Status != expectedStatus {
+		return fmt.Errorf("expected status %d, but got %d", expectedStatus, a.lastMatchedEvent.Response.Status)
 	}
 
 	return nil
@@ -256,16 +263,16 @@ func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveResponseStatus(expecte
 
 // theLatestAnalyticsEventShouldHaveMetadataField verifies a metadata field in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveMetadataField(fieldName, expectedValue string) error {
-	event, err := a.getLatestAnalyticsEvent("") // Empty filter
-	if err != nil {
-		return err
+	// Use the last matched event from the URI validation step
+	if a.lastMatchedEvent == nil {
+		return fmt.Errorf("no event has been matched yet - ensure URI validation step runs first")
 	}
 
-	if event.Metadata == nil {
+	if a.lastMatchedEvent.Metadata == nil {
 		return fmt.Errorf("event has no metadata")
 	}
 
-	actualValue, ok := event.Metadata[fieldName]
+	actualValue, ok := a.lastMatchedEvent.Metadata[fieldName]
 	if !ok {
 		return fmt.Errorf("metadata field '%s' not found", fieldName)
 	}

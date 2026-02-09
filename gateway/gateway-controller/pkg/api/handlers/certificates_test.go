@@ -32,7 +32,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/wso2/api-platform/gateway/gateway-controller/pkg/api/middleware"
 	"github.com/wso2/api-platform/gateway/gateway-controller/pkg/models"
 )
@@ -593,13 +595,14 @@ func TestUploadCertificate_MalformedPEMHeaders(t *testing.T) {
 	}
 }
 
-// TestUploadCertificate_SpecialCharactersInName tests special characters in certificate name
+// TestUploadCertificate_SpecialCharactersInName tests that certificate names
+// with special characters are correctly stored in the database
 func TestUploadCertificate_SpecialCharactersInName(t *testing.T) {
 	mockDB := NewMockStorage()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := &APIServer{db: mockDB, logger: logger}
 
-	// Test that various special characters in names don't cause validation issues
+	// Test various special character names are accepted and stored correctly
 	tests := []struct {
 		name     string
 		certName string
@@ -614,14 +617,40 @@ func TestUploadCertificate_SpecialCharactersInName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Just verify certificate validation works regardless of name
-			// (name is not validated by certificate validation logic)
-			_, err := server.validateCertificate([]byte(validTestCert))
+			// Create a certificate with the special character name
+			cert := &models.StoredCertificate{
+				ID:          uuid.New().String(),
+				Name:        tt.certName, // ← ACTUALLY USES tt.certName NOW
+				Certificate: []byte(validTestCert),
+				Subject:     "CN=test.com",
+				Issuer:      "CN=test.com",
+				NotBefore:   time.Now(),
+				NotAfter:    time.Now().Add(365 * 24 * time.Hour),
+				CertCount:   1,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			}
+
+			// Save to database - this is what the handler does at line 119
+			err := server.db.SaveCertificate(cert)
 			assert.NoError(t, err)
 
-			// Verify metadata extraction works
-			_, _, _, _, err = server.extractCertificateMetadata([]byte(validTestCert))
-			assert.NoError(t, err)
+			// Verify the certificate was saved with the correct name
+			savedCerts, err := mockDB.ListCertificates()
+			require.NoError(t, err)
+
+			found := false
+			for _, saved := range savedCerts {
+				if saved.Name == tt.certName {
+					found = true
+					assert.Equal(t, tt.certName, saved.Name)
+					break
+				}
+			}
+			assert.True(t, found, "Certificate with name %q should be saved", tt.certName)
+
+			// Clean up for next iteration
+			mockDB.certs = []*models.StoredCertificate{}
 		})
 	}
 }
