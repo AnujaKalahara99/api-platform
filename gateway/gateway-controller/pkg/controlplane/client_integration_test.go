@@ -440,7 +440,7 @@ func TestAPIDeployedEvent_JSONParsing(t *testing.T) {
 		"payload": {
 			"apiId": "api-123",
 			"environment": "production",
-			"revisionId": "rev-1",
+			"deploymentId": "rev-1",
 			"vhost": "api.example.com"
 		},
 		"timestamp": "2025-01-30T12:00:00Z",

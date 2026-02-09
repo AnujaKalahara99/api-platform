@@ -189,8 +189,9 @@ func (t *Translator) TranslateConfigs(
 			continue
 		}
 
-		// Include ALL configs (both deployed and pending) in the snapshot
-		// This ensures existing APIs are not overridden when deploying new APIs
+		// Include all non-undeployed configs (both deployed and pending) in the snapshot.
+		// Undeployed configs are excluded so only active/pending APIs appear in xDS,
+		// while ensuring existing deployed APIs are not overridden when deploying new ones.
 
 		// Create routes and clusters for this API
 		var routesList []*route.Route

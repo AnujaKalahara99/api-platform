@@ -196,11 +196,11 @@ func (h *GatewayInternalAPIHandler) CreateGatewayAPIDeployment(c *gin.Context) {
 		return
 	}
 
-	// Extract optional revision ID from query parameter
-	revisionID := c.Query("revisionId")
-	var revisionIDPtr *string
-	if revisionID != "" {
-		revisionIDPtr = &revisionID
+	// Extract optional deployment ID from query parameter
+	deploymentID := c.Query("deploymentId")
+	var deploymentIDPtr *string
+	if deploymentID != "" {
+		deploymentIDPtr = &deploymentID
 	}
 
 	// Parse and validate request body
@@ -217,7 +217,7 @@ func (h *GatewayInternalAPIHandler) CreateGatewayAPIDeployment(c *gin.Context) {
 	gatewayID := gateway.ID
 
 	response, err := h.gatewayInternalService.CreateGatewayAPIDeployment(
-		apiID, orgID, gatewayID, notification, revisionIDPtr)
+		apiID, orgID, gatewayID, notification, deploymentIDPtr)
 	if err != nil {
 		if errors.Is(err, constants.ErrInvalidInput) {
 			c.JSON(http.StatusBadRequest, utils.NewErrorResponse(400, "Bad Request",

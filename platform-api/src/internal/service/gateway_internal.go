@@ -122,9 +122,9 @@ func (s *GatewayInternalAPIService) GetActiveDeploymentByGateway(apiID, orgID, g
 
 // CreateGatewayAPIDeployment handles the registration of an API deployment from a gateway
 func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID, gatewayID string,
-	notification dto.APIDeploymentNotification, revisionID *string) (*dto.GatewayAPIDeploymentResponse, error) {
-	// Note: revisionID parameter is reserved for future use
-	_ = revisionID
+	notification dto.APIDeploymentNotification, deploymentID *string) (*dto.GatewayAPIDeploymentResponse, error) {
+	// Note: deploymentID parameter is reserved for future use
+	_ = deploymentID
 
 	// Validate input
 	if apiHandle == "" || orgID == "" || gatewayID == "" {
