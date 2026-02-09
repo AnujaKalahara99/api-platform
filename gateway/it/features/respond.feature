@@ -675,7 +675,15 @@ Feature: Respond Policy Integration Tests
             url: http://sample-backend:9080
         operations:
           - method: GET
-            path: /users/:id
+            path: /health
+            policies:
+              - name: respond
+                version: v0
+                params:
+                  statusCode: 200
+                  body: "OK"
+          - method: GET
+            path: /users/{id}
             policies:
               - name: respond
                 version: v0
@@ -689,7 +697,7 @@ Feature: Respond Policy Integration Tests
                       value: "true"
       """
     Then the response should be successful
-    And I wait for the endpoint "http://localhost:8080/respond-mock-user/v1.0.0/users/test" to be ready
+    And I wait for the endpoint "http://localhost:8080/respond-mock-user/v1.0.0/health" to be ready
     When I send a GET request to "http://localhost:8080/respond-mock-user/v1.0.0/users/123"
     Then the response status code should be 200
     And the response body should contain "John Doe"
@@ -1009,17 +1017,17 @@ Feature: Respond Policy Integration Tests
   # Status Code Ranges
   # ========================================
 
-  Scenario: Return 100-level informational status code
+  Scenario: Return 206 Partial Content status code
     When I deploy an API with the following configuration:
       """
       apiVersion: gateway.api-platform.wso2.com/v1alpha1
       kind: RestApi
       metadata:
-        name: test-respond-100-continue
+        name: test-respond-206-partial
       spec:
-        displayName: Respond-100-Continue-Test
+        displayName: Respond-206-Partial-Test
         version: v1.0.0
-        context: /respond-100-continue/$version
+        context: /respond-206-partial/$version
         upstream:
           main:
             url: http://sample-backend:9080
@@ -1038,19 +1046,23 @@ Feature: Respond Policy Integration Tests
               - name: respond
                 version: v0
                 params:
-                  statusCode: 102
-                  body: '{"status": "Processing"}'
+                  statusCode: 206
+                  body: '{"status": "Partial Content", "range": "bytes 0-1023/2048"}'
                   headers:
                     - name: Content-Type
                       value: application/json
+                    - name: Content-Range
+                      value: "bytes 0-1023/2048"
       """
     Then the response should be successful
-    And I wait for the endpoint "http://localhost:8080/respond-100-continue/v1.0.0/health" to be ready
-    When I send a POST request to "http://localhost:8080/respond-100-continue/v1.0.0/test" with body:
+    And I wait for the endpoint "http://localhost:8080/respond-206-partial/v1.0.0/health" to be ready
+    When I send a POST request to "http://localhost:8080/respond-206-partial/v1.0.0/test" with body:
       """
       {"test": "data"}
       """
-    Then the response status code should be 102
+    Then the response status code should be 206
+    And the response body should contain "Partial Content"
+    And the response header "Content-Range" should be "bytes 0-1023/2048"
 
   Scenario: Return custom error code 418 I'm a teapot
     When I deploy an API with the following configuration:

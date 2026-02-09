@@ -99,7 +99,7 @@ func TestFeatures(t *testing.T) {
 				"features/semantic-cache.feature",
 				"features/semantic-prompt-guard.feature",
 				// "features/modify-headers.feature",
-				// "features/respond.feature",
+				"features/respond.feature",
 				"features/llm-provider.feature",
 				"features/certificates.feature",
 				"features/config-dump.feature",

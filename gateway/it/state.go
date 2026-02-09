@@ -119,6 +119,10 @@ func NewTestState() *TestState {
 		HTTPClient: &http.Client{
 			Timeout:   config.HTTPTimeout,
 			Transport: transport,
+			// Don't follow redirects - return redirect responses directly
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 		Context: make(map[string]interface{}),
 	}
