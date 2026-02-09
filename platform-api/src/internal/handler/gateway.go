@@ -263,6 +263,12 @@ func (h *GatewayHandler) DeleteGateway(c *gin.Context) {
 				"The gateway has associated APIs. Please remove all API associations before deleting the gateway"))
 			return
 		}
+		if errors.Is(err, constants.ErrGatewayHasDeployments) {
+			utils.LogError("Gateway has active API deployments during deletion", err)
+			c.JSON(http.StatusConflict, utils.NewErrorResponse(409, "Conflict",
+				"Cannot delete gateway: it has active API deployments. Please undeploy all APIs before deleting the gateway"))
+			return
+		}
 
 		if strings.Contains(err.Error(), "invalid UUID") {
 			utils.LogError("Invalid UUID during gateway deletion", err)
