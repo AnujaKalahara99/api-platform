@@ -66,7 +66,7 @@ func UpdateGoMod(srcDir string, policies []*types.DiscoveredPolicy) error {
 		if err := cmd.Run(); err != nil {
 			cancel()
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				return fmt.Errorf("go get timed out after 1min for %s in %s: %w; stderr: %s", target, srcDir, err, stderr.String())
+				return fmt.Errorf("go get timed out after 2min for %s in %s: %w; stderr: %s", target, srcDir, err, stderr.String())
 			}
 			return fmt.Errorf("go get failed for %s in %s: %w; stderr: %s", target, srcDir, err, stderr.String())
 		}

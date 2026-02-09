@@ -235,13 +235,18 @@ func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestURI(expectedURI
 
 // theLatestAnalyticsEventShouldHaveRequestMethod verifies the request method in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestMethod(expectedMethod string) error {
-	// Use the last matched event from the URI validation step
-	if a.lastMatchedEvent == nil {
-		return fmt.Errorf("no event has been matched yet - ensure URI validation step runs first")
+	// Use the last matched event if available, otherwise fetch latest without filter
+	event := a.lastMatchedEvent
+	if event == nil {
+		var err error
+		event, err = a.getLatestAnalyticsEvent("")
+		if err != nil {
+			return err
+		}
 	}
 
-	if a.lastMatchedEvent.Request.Verb != expectedMethod {
-		return fmt.Errorf("expected method '%s', but got '%s'", expectedMethod, a.lastMatchedEvent.Request.Verb)
+	if event.Request.Verb != expectedMethod {
+		return fmt.Errorf("expected method '%s', but got '%s'", expectedMethod, event.Request.Verb)
 	}
 
 	return nil
@@ -249,13 +254,18 @@ func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestMethod(expected
 
 // theLatestAnalyticsEventShouldHaveResponseStatus verifies the response status in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveResponseStatus(expectedStatus int) error {
-	// Use the last matched event from the URI validation step
-	if a.lastMatchedEvent == nil {
-		return fmt.Errorf("no event has been matched yet - ensure URI validation step runs first")
+	// Use the last matched event if available, otherwise fetch latest without filter
+	event := a.lastMatchedEvent
+	if event == nil {
+		var err error
+		event, err = a.getLatestAnalyticsEvent("")
+		if err != nil {
+			return err
+		}
 	}
 
-	if a.lastMatchedEvent.Response.Status != expectedStatus {
-		return fmt.Errorf("expected status %d, but got %d", expectedStatus, a.lastMatchedEvent.Response.Status)
+	if event.Response.Status != expectedStatus {
+		return fmt.Errorf("expected status %d, but got %d", expectedStatus, event.Response.Status)
 	}
 
 	return nil
@@ -263,16 +273,21 @@ func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveResponseStatus(expecte
 
 // theLatestAnalyticsEventShouldHaveMetadataField verifies a metadata field in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveMetadataField(fieldName, expectedValue string) error {
-	// Use the last matched event from the URI validation step
-	if a.lastMatchedEvent == nil {
-		return fmt.Errorf("no event has been matched yet - ensure URI validation step runs first")
+	// Use the last matched event if available, otherwise fetch latest without filter
+	event := a.lastMatchedEvent
+	if event == nil {
+		var err error
+		event, err = a.getLatestAnalyticsEvent("")
+		if err != nil {
+			return err
+		}
 	}
 
-	if a.lastMatchedEvent.Metadata == nil {
+	if event.Metadata == nil {
 		return fmt.Errorf("event has no metadata")
 	}
 
-	actualValue, ok := a.lastMatchedEvent.Metadata[fieldName]
+	actualValue, ok := event.Metadata[fieldName]
 	if !ok {
 		return fmt.Errorf("metadata field '%s' not found", fieldName)
 	}

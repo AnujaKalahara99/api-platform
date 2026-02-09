@@ -595,9 +595,10 @@ func TestUploadCertificate_MalformedPEMHeaders(t *testing.T) {
 	}
 }
 
-// TestUploadCertificate_SpecialCharactersInName tests that certificate names
-// with special characters are correctly stored in the database
-func TestUploadCertificate_SpecialCharactersInName(t *testing.T) {
+// TestSaveCertificate_SpecialCharactersInName tests that certificate names
+// with special characters are correctly stored in the database.
+// Note: This tests direct database storage, not the full UploadCertificate handler flow.
+func TestSaveCertificate_SpecialCharactersInName(t *testing.T) {
 	mockDB := NewMockStorage()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	server := &APIServer{db: mockDB, logger: logger}

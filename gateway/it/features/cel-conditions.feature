@@ -82,6 +82,7 @@ Feature: CEL Execution Conditions
       """
     Then the response status code should be 200
     And the response should contain echoed header "x-cel-executed" with value "true"
+    And I delete the API "cel-method-condition-api-v1.0.0"
 
   Scenario: Policy executes on multiple methods using IN operator
     When I deploy an API with the following configuration:
@@ -153,6 +154,7 @@ Feature: CEL Execution Conditions
       """
     Then the response status code should be 200
     And the response should contain echoed header "x-write-operation" with value "true"
+    And I delete the API "cel-multi-method-api-v1.0.0"
 
   # ============================================================
   # Request Header Conditions
@@ -196,6 +198,7 @@ Feature: CEL Execution Conditions
     When I send a GET request to "http://localhost:8080/cel-header-presence/v1.0.0/check" with header "X-Special-Token" value "my-secret-token"
     Then the response status code should be 200
     And the response should contain echoed header "x-token-validated" with value "true"
+    And I delete the API "cel-header-presence-api-v1.0.0"
 
   Scenario: Policy executes based on header value
     When I deploy an API with the following configuration:
@@ -235,6 +238,7 @@ Feature: CEL Execution Conditions
     When I send a GET request to "http://localhost:8080/cel-header-value/v1.0.0/premium" with header "X-Tier" value "premium"
     Then the response status code should be 200
     And the response should contain echoed header "x-premium-access" with value "granted"
+    And I delete the API "cel-header-value-api-v1.0.0"
 
   # ============================================================
   # Request Path Conditions
@@ -289,6 +293,7 @@ Feature: CEL Execution Conditions
     When I send a GET request to "http://localhost:8080/cel-path-prefix/v1.0.0/admin/settings"
     Then the response status code should be 200
     And the response should contain echoed header "x-admin-request" with value "true"
+    And I delete the API "cel-path-prefix-api-v1.0.0"
 
   # ============================================================
   # Combined Conditions
@@ -355,3 +360,4 @@ Feature: CEL Execution Conditions
     Then the response status code should be 200
     And the response should contain echoed header "x-secure-write" with value "authorized"
     And I clear all headers
+    And I delete the API "cel-combined-condition-api-v1.0.0"

@@ -59,6 +59,7 @@ Feature: Analytics - Basic Event Capture
     Then the response status code should be 200
     And I wait 5 seconds for analytics to be published
     And the analytics collector should have received at least 1 event
+    And the latest analytics event should have request URI "/metadata-test/v2/data"
     And the latest analytics event should have metadata field "apiContext" with value "/metadata-test/v2"
     And the latest analytics event should have metadata field "apiName" with value "Metadata Test API"
     And the latest analytics event should have metadata field "apiVersion" with value "v2"
