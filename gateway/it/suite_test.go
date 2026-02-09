@@ -72,48 +72,7 @@ func TestFeatures(t *testing.T) {
 		Options: &godog.Options{
 			Strict: true,
 			Format: "pretty",
-			Paths: []string{
-				"features/health.feature",
-				// "features/metrics.feature",
-				"features/api_deploy.feature",
-				"features/mcp_deploy.feature",
-				"features/ratelimit.feature",
-				"features/jwt-auth.feature",
-				"features/cors.feature",
-				"features/word-count-guardrail.feature",
-				"features/sentence-count-guardrail.feature",
-				"features/url-guardrail.feature",
-				"features/regex-guardrail.feature",
-				"features/prompt-decorator.feature",
-				"features/prompt-template.feature",
-				"features/pii-masking-regex.feature",
-				// "features/model-weighted-round-robin.feature",
-				// "features/model-round-robin.feature",
-				// "features/json-schema-guardrail.feature",
-				"features/llm-provider-templates.feature",
-				"features/analytics-header-filter.feature",
-				"features/lazy-resources-xds.feature",
-				"features/content-length-guardrail.feature",
-				"features/azure-content-safety.feature",
-				"features/aws-bedrock-guardrail.feature",
-				"features/semantic-cache.feature",
-				"features/semantic-prompt-guard.feature",
-				// "features/modify-headers.feature",
-				// "features/respond.feature",
-				"features/llm-provider.feature",
-				"features/certificates.feature",
-				"features/config-dump.feature",
-				"features/api-management.feature",
-				"features/api-error-responses.feature",
-				"features/list-policies.feature",
-				"features/api-keys.feature",
-				"features/api-with-policies.feature",
-				"features/llm-proxies.feature",
-				"features/search-deployments.feature",
-				"features/policy-engine-admin.feature",
-				"features/cel-conditions.feature",
-				"features/analytics-basic.feature",
-			},
+			Paths: getFeaturePaths(),
 			TestingT: t,
 		},
 	}
@@ -122,6 +81,80 @@ func TestFeatures(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatal("non-zero status returned, failed to run feature tests")
 	}
+}
+
+// getFeaturePaths returns default suite feature paths unless IT_FEATURE_PATHS is set.
+// IT_FEATURE_PATHS is a comma-separated list (for example: "features/metrics.feature,features/health.feature").
+func getFeaturePaths() []string {
+	defaultPaths := []string{
+		"features/health.feature",
+		"features/metrics.feature",
+		"features/api_deploy.feature",
+		"features/mcp_deploy.feature",
+		"features/ratelimit.feature",
+		"features/jwt-auth.feature",
+		"features/cors.feature",
+		"features/word-count-guardrail.feature",
+		"features/sentence-count-guardrail.feature",
+		"features/url-guardrail.feature",
+		"features/regex-guardrail.feature",
+		"features/prompt-decorator.feature",
+		"features/prompt-template.feature",
+		"features/pii-masking-regex.feature",
+		// "features/model-weighted-round-robin.feature",
+		// "features/model-round-robin.feature",
+		// "features/json-schema-guardrail.feature",
+		"features/llm-provider-templates.feature",
+		"features/analytics-header-filter.feature",
+		"features/lazy-resources-xds.feature",
+		"features/content-length-guardrail.feature",
+		"features/azure-content-safety.feature",
+		"features/aws-bedrock-guardrail.feature",
+		"features/semantic-cache.feature",
+		"features/semantic-prompt-guard.feature",
+		// "features/modify-headers.feature",
+		// "features/respond.feature",
+		"features/llm-provider.feature",
+		"features/certificates.feature",
+		"features/config-dump.feature",
+		"features/api-management.feature",
+		"features/api-error-responses.feature",
+		"features/list-policies.feature",
+		"features/api-keys.feature",
+		"features/api-with-policies.feature",
+		"features/llm-proxies.feature",
+		"features/search-deployments.feature",
+		"features/policy-engine-admin.feature",
+		"features/cel-conditions.feature",
+		"features/analytics-basic.feature",
+	}
+
+	raw := strings.TrimSpace(os.Getenv("IT_FEATURE_PATHS"))
+	if raw == "" {
+		return defaultPaths
+	}
+
+	entries := strings.Split(raw, ",")
+	paths := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		path := strings.TrimSpace(entry)
+		if path == "" {
+			continue
+		}
+		if strings.HasPrefix(path, "features/") || strings.HasPrefix(path, "/") {
+			paths = append(paths, path)
+			continue
+		}
+		paths = append(paths, filepath.Join("features", path))
+	}
+
+	if len(paths) == 0 {
+		log.Printf("IT_FEATURE_PATHS is set but empty after parsing; using default feature set")
+		return defaultPaths
+	}
+
+	log.Printf("Using feature paths from IT_FEATURE_PATHS: %s", strings.Join(paths, ", "))
+	return paths
 }
 
 // InitializeTestSuite sets up the test suite (runs once before all scenarios)

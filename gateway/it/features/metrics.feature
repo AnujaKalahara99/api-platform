@@ -38,26 +38,63 @@ Feature: Gateway Metrics
     Given I authenticate using basic auth as "admin"
     When I deploy an API with the following configuration:
       """
-      {
-        "name": "metrics-test-api",
-        "version": "1.0",
-        "basePath": "/metrics-test-api",
-        "backend": {
-          "url": "http://sample-backend:9080"
-        },
-        "routes": [
-          {
-            "path": "/test",
-            "methods": ["GET"]
-          }
-        ]
-      }
+      apiVersion: gateway.api-platform.wso2.com/v1alpha1
+      kind: RestApi
+      metadata:
+        name: metrics-test-api-v1.0
+      spec:
+        displayName: Metrics-Test-API
+        version: v1.0
+        context: /metrics-test-api/$version
+        upstream:
+          main:
+            url: http://sample-backend:9080
+        operations:
+          - method: GET
+            path: /health
+          - method: GET
+            path: /test
       """
+    Then the response should be successful
+    And I wait for the endpoint "http://localhost:8080/metrics-test-api/v1.0/health" to be ready
     And I send a GET request to the gateway controller metrics endpoint
     Then the response should contain metric "gateway_controller_api_operations_total"
     And the response should contain metric "gateway_controller_apis_total"
+    Given I authenticate using basic auth as "admin"
+    When I delete the API "metrics-test-api-v1.0"
+    Then the response should be successful
 
-  
+  Scenario: Policy engine metrics reflect request processing
+    Given I authenticate using basic auth as "admin"
+    And I deploy an API with the following configuration:
+      """
+      apiVersion: gateway.api-platform.wso2.com/v1alpha1
+      kind: RestApi
+      metadata:
+        name: metrics-api-v1.0
+      spec:
+        displayName: Metrics-API
+        version: v1.0
+        context: /metrics-api/$version
+        upstream:
+          main:
+            url: http://sample-backend:9080
+        operations:
+          - method: GET
+            path: /health
+          - method: GET
+            path: /test
+      """
+    Then the response should be successful
+    And I wait for the endpoint "http://localhost:8080/metrics-api/v1.0/health" to be ready
+    When I send a GET request to "http://localhost:8080/metrics-api/v1.0/test"
+    Then the response status code should be 200
+    When I send a GET request to the policy engine metrics endpoint
+    Then the response should contain metric "policy_engine_requests_total"
+    Given I authenticate using basic auth as "admin"
+    When I delete the API "metrics-api-v1.0"
+    Then the response should be successful
+
   Scenario: Policy engine exposes system metrics
     When I send a GET request to the policy engine metrics endpoint
     Then the response status code should be 200
@@ -83,4 +120,67 @@ Feature: Gateway Metrics
     And the response should contain metric "go_memstats_alloc_bytes"
     And the response should contain metric "process_cpu_seconds_total"
 
-  
+  Scenario: Policy engine metrics track policy execution after API request
+    Given I authenticate using basic auth as "admin"
+    And I deploy an API with the following configuration:
+      """
+      apiVersion: gateway.api-platform.wso2.com/v1alpha1
+      kind: RestApi
+      metadata:
+        name: policy-metrics-api-v1.0
+      spec:
+        displayName: Policy-Metrics-API
+        version: v1.0
+        context: /policy-metrics-api/$version
+        upstream:
+          main:
+            url: http://sample-backend:9080
+        operations:
+          - method: GET
+            path: /health
+          - method: GET
+            path: /invoke
+          - method: POST
+            path: /invoke
+      """
+    Then the response should be successful
+    And I wait for the endpoint "http://localhost:8080/policy-metrics-api/v1.0/health" to be ready
+    When I send a GET request to "http://localhost:8080/policy-metrics-api/v1.0/invoke"
+    Then the response status code should be 200
+    When I send a GET request to the policy engine metrics endpoint
+    Then the response should contain metric "policy_engine_request_duration_seconds"
+    And the response should contain metric "policy_engine_context_build_duration_seconds"
+    Given I authenticate using basic auth as "admin"
+    When I delete the API "policy-metrics-api-v1.0"
+    Then the response should be successful
+
+  Scenario: Policy engine tracks policy chain configuration
+    Given I authenticate using basic auth as "admin"
+    And I deploy an API with the following configuration:
+      """
+      apiVersion: gateway.api-platform.wso2.com/v1alpha1
+      kind: RestApi
+      metadata:
+        name: chain-metrics-api-v1.0
+      spec:
+        displayName: Chain-Metrics-API
+        version: v1.0
+        context: /chain-metrics-api/$version
+        upstream:
+          main:
+            url: http://sample-backend:9080
+        operations:
+          - method: GET
+            path: /health
+          - method: GET
+            path: /test
+      """
+    Then the response should be successful
+    And I wait for the endpoint "http://localhost:8080/chain-metrics-api/v1.0/health" to be ready
+    When I send a GET request to the policy engine metrics endpoint
+    Then the response status code should be 200
+    And the response should contain metric "policy_engine_policy_chains_loaded"
+    And the response should contain metric "policy_engine_snapshot_size"
+    Given I authenticate using basic auth as "admin"
+    When I delete the API "chain-metrics-api-v1.0"
+    Then the response should be successful
