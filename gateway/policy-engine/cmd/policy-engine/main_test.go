@@ -1,0 +1,391 @@
+/*
+ * Copyright (c) 2025, WSO2 LLC. (https://www.wso2.com).
+ *
+ * WSO2 LLC. licenses this file to you under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except
+ * in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package main
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/wso2/api-platform/gateway/policy-engine/internal/config"
+	"github.com/wso2/api-platform/gateway/policy-engine/internal/kernel"
+	"github.com/wso2/api-platform/gateway/policy-engine/internal/registry"
+)
+
+// =============================================================================
+// applyFlagOverrides Tests
+// =============================================================================
+
+func TestApplyFlagOverrides_PolicyChainsFile(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			ConfigMode: config.ConfigModeConfig{
+				Mode: "xds",
+			},
+			XDS: config.XDSConfig{
+				Enabled: true,
+			},
+		},
+	}
+
+	// Set flag value
+	testFile := "/path/to/chains.yaml"
+	oldPolicyChainsFile := *policyChainsFile
+	*policyChainsFile = testFile
+	defer func() { *policyChainsFile = oldPolicyChainsFile }()
+
+	applyFlagOverrides(cfg)
+
+	assert.Equal(t, "file", cfg.PolicyEngine.ConfigMode.Mode)
+	assert.Equal(t, testFile, cfg.PolicyEngine.FileConfig.Path)
+	assert.False(t, cfg.PolicyEngine.XDS.Enabled)
+}
+
+func TestApplyFlagOverrides_XDSServerAddr(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			XDS: config.XDSConfig{
+				ServerAddress: "default:18000",
+			},
+		},
+	}
+
+	testAddr := "custom:19000"
+	oldXdsServerAddr := *xdsServerAddr
+	*xdsServerAddr = testAddr
+	defer func() { *xdsServerAddr = oldXdsServerAddr }()
+
+	applyFlagOverrides(cfg)
+
+	assert.Equal(t, testAddr, cfg.PolicyEngine.XDS.ServerAddress)
+}
+
+func TestApplyFlagOverrides_XDSNodeID(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			XDS: config.XDSConfig{
+				NodeID: "default-node",
+			},
+		},
+	}
+
+	testNodeID := "custom-node-123"
+	oldXdsNodeID := *xdsNodeID
+	*xdsNodeID = testNodeID
+	defer func() { *xdsNodeID = oldXdsNodeID }()
+
+	applyFlagOverrides(cfg)
+
+	assert.Equal(t, testNodeID, cfg.PolicyEngine.XDS.NodeID)
+}
+
+func TestApplyFlagOverrides_NoFlags(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			ConfigMode: config.ConfigModeConfig{
+				Mode: "xds",
+			},
+			XDS: config.XDSConfig{
+				ServerAddress: "default:18000",
+				NodeID:        "default-node",
+				Enabled:       true,
+			},
+		},
+	}
+
+	// Clear all flags
+	oldPolicyChainsFile := *policyChainsFile
+	oldXdsServerAddr := *xdsServerAddr
+	oldXdsNodeID := *xdsNodeID
+	*policyChainsFile = ""
+	*xdsServerAddr = ""
+	*xdsNodeID = ""
+	defer func() {
+		*policyChainsFile = oldPolicyChainsFile
+		*xdsServerAddr = oldXdsServerAddr
+		*xdsNodeID = oldXdsNodeID
+	}()
+
+	applyFlagOverrides(cfg)
+
+	// Config should remain unchanged
+	assert.Equal(t, "xds", cfg.PolicyEngine.ConfigMode.Mode)
+	assert.Equal(t, "default:18000", cfg.PolicyEngine.XDS.ServerAddress)
+	assert.Equal(t, "default-node", cfg.PolicyEngine.XDS.NodeID)
+	assert.True(t, cfg.PolicyEngine.XDS.Enabled)
+}
+
+// =============================================================================
+// setupLogger Tests
+// =============================================================================
+
+func TestSetupLogger_DebugLevel(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			Logging: config.LoggingConfig{
+				Level:  "debug",
+				Format: "text",
+			},
+		},
+	}
+
+	logger := setupLogger(cfg)
+
+	require.NotNil(t, logger)
+	assert.True(t, logger.Enabled(context.Background(), slog.LevelDebug))
+}
+
+func TestSetupLogger_InfoLevel(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			Logging: config.LoggingConfig{
+				Level:  "info",
+				Format: "text",
+			},
+		},
+	}
+
+	logger := setupLogger(cfg)
+
+	require.NotNil(t, logger)
+	assert.True(t, logger.Enabled(context.Background(), slog.LevelInfo))
+	assert.False(t, logger.Enabled(context.Background(), slog.LevelDebug))
+}
+
+func TestSetupLogger_WarnLevel(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			Logging: config.LoggingConfig{
+				Level:  "warn",
+				Format: "text",
+			},
+		},
+	}
+
+	logger := setupLogger(cfg)
+
+	require.NotNil(t, logger)
+	assert.True(t, logger.Enabled(context.Background(), slog.LevelWarn))
+	assert.False(t, logger.Enabled(context.Background(), slog.LevelInfo))
+}
+
+func TestSetupLogger_ErrorLevel(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			Logging: config.LoggingConfig{
+				Level:  "error",
+				Format: "text",
+			},
+		},
+	}
+
+	logger := setupLogger(cfg)
+
+	require.NotNil(t, logger)
+	assert.True(t, logger.Enabled(context.Background(), slog.LevelError))
+	assert.False(t, logger.Enabled(context.Background(), slog.LevelWarn))
+}
+
+func TestSetupLogger_DefaultLevel(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			Logging: config.LoggingConfig{
+				Level:  "invalid",
+				Format: "text",
+			},
+		},
+	}
+
+	logger := setupLogger(cfg)
+
+	require.NotNil(t, logger)
+	// Should default to Info level
+	assert.True(t, logger.Enabled(context.Background(), slog.LevelInfo))
+}
+
+func TestSetupLogger_JSONFormat(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			Logging: config.LoggingConfig{
+				Level:  "info",
+				Format: "json",
+			},
+		},
+	}
+
+	logger := setupLogger(cfg)
+
+	require.NotNil(t, logger)
+	// Logger should be created successfully with JSON format
+	assert.NotNil(t, logger)
+}
+
+func TestSetupLogger_TextFormat(t *testing.T) {
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			Logging: config.LoggingConfig{
+				Level:  "info",
+				Format: "text",
+			},
+		},
+	}
+
+	logger := setupLogger(cfg)
+
+	require.NotNil(t, logger)
+	// Logger should be created successfully with text format
+	assert.NotNil(t, logger)
+}
+
+// =============================================================================
+// initializeFileConfig Tests
+// =============================================================================
+
+func TestInitializeFileConfig_EmptyFile(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := registry.GetRegistry()
+
+	// Create temp empty config file
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "chains.yaml")
+	yamlContent := `[]`
+	err := os.WriteFile(configPath, []byte(yamlContent), 0644)
+	require.NoError(t, err)
+
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			FileConfig: config.FileConfigConfig{
+				Path: configPath,
+			},
+		},
+	}
+
+	err = initializeFileConfig(context.Background(), cfg, k, reg)
+
+	// Empty file should load successfully
+	assert.NoError(t, err)
+}
+
+func TestInitializeFileConfig_FileNotFound(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := registry.GetRegistry()
+
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			FileConfig: config.FileConfigConfig{
+				Path: "/nonexistent/path/chains.yaml",
+			},
+		},
+	}
+
+	err := initializeFileConfig(context.Background(), cfg, k, reg)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load configuration from file")
+}
+
+func TestInitializeFileConfig_InvalidYAML(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := registry.GetRegistry()
+
+	// Create temp config file with invalid YAML
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "invalid.yaml")
+	err := os.WriteFile(configPath, []byte("invalid: yaml: ["), 0644)
+	require.NoError(t, err)
+
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			FileConfig: config.FileConfigConfig{
+				Path: configPath,
+			},
+		},
+	}
+
+	err = initializeFileConfig(context.Background(), cfg, k, reg)
+
+	assert.Error(t, err)
+}
+
+// =============================================================================
+// initializeXDSClient Tests (with valid config)
+// =============================================================================
+
+func TestInitializeXDSClient_InvalidConfig(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := registry.GetRegistry()
+
+	// Create config with missing required fields
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			XDS: config.XDSConfig{
+				ServerAddress:         "", // Missing required field
+				NodeID:                "",
+				ConnectTimeout:        5 * time.Second,
+				RequestTimeout:        5 * time.Second,
+				InitialReconnectDelay: 1 * time.Second,
+				MaxReconnectDelay:     30 * time.Second,
+			},
+		},
+	}
+
+	_, err := initializeXDSClient(context.Background(), cfg, k, reg)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create xDS client")
+}
+
+func TestInitializeXDSClient_ValidConfig(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := registry.GetRegistry()
+
+	cfg := &config.Config{
+		PolicyEngine: config.PolicyEngine{
+			XDS: config.XDSConfig{
+				ServerAddress:         "localhost:18000",
+				NodeID:                "test-node",
+				Cluster:               "test-cluster",
+				ConnectTimeout:        1 * time.Second,
+				RequestTimeout:        1 * time.Second,
+				InitialReconnectDelay: 1 * time.Second,
+				MaxReconnectDelay:     5 * time.Second,
+				TLS: config.XDSTLSConfig{
+					Enabled: false,
+				},
+			},
+		},
+	}
+
+	// Note: This will fail to actually connect since there's no server,
+	// but the client creation and start attempt should work
+	client, err := initializeXDSClient(context.Background(), cfg, k, reg)
+
+	// Client should be created successfully even if it can't connect
+	require.NoError(t, err)
+	require.NotNil(t, client)
+
+	// Note: Not calling Stop/Wait due to potential issues with context in test environment
+	// The client will be cleaned up when the test exits
+}

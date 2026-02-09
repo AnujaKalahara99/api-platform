@@ -32,8 +32,9 @@ import (
 
 // AnalyticsSteps wraps TestState and HTTPSteps for analytics step definitions
 type AnalyticsSteps struct {
-	state     *TestState
-	httpSteps *steps.HTTPSteps
+	state            *TestState
+	httpSteps        *steps.HTTPSteps
+	lastMatchedEvent *AnalyticsEvent // Stores the last matched event for validation steps
 }
 
 // AnalyticsEvent represents the structure of a Moesif analytics event
@@ -71,25 +72,28 @@ func RegisterAnalyticsSteps(ctx *godog.ScenarioContext, state *TestState, httpSt
 
 // iResetTheAnalyticsCollector resets all events in the mock analytics collector
 func (a *AnalyticsSteps) iResetTheAnalyticsCollector() error {
+	// Clear the last matched event for test isolation
+	a.lastMatchedEvent = nil
+
 	url := fmt.Sprintf("http://localhost:8086/test/reset")
-	
+
 	req, err := http.NewRequest("POST", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create reset request: %w", err)
 	}
-	
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to reset analytics collector: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("reset failed with status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
@@ -165,103 +169,134 @@ func (a *AnalyticsSteps) theAnalyticsCollectorShouldHaveReceivedAtLeastEvents(mi
 	return nil
 }
 
-// getLatestAnalyticsEvent retrieves the most recent analytics event
-func (a *AnalyticsSteps) getLatestAnalyticsEvent() (*AnalyticsEvent, error) {
+// getLatestAnalyticsEvent retrieves the most recent analytics event, optionally filtered by URI
+func (a *AnalyticsSteps) getLatestAnalyticsEvent(uriFilter string) (*AnalyticsEvent, error) {
 	url := fmt.Sprintf("http://localhost:8086/test/events")
-	
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create events request: %w", err)
 	}
-	
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("events request failed with status %d", resp.StatusCode)
 	}
-	
+
 	var events []AnalyticsEvent
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		return nil, fmt.Errorf("failed to decode events response: %w", err)
 	}
-	
+
 	if len(events) == 0 {
 		return nil, fmt.Errorf("no events found in analytics collector")
 	}
-	
-	// Return the last event
-	return &events[len(events)-1], nil
+
+	// If no filter provided, return the last event (backward compatible)
+	if uriFilter == "" {
+		return &events[len(events)-1], nil
+	}
+
+	// Filter events by URI and return the latest matching event
+	// Search from end to beginning to find the most recent match
+	for i := len(events) - 1; i >= 0; i-- {
+		if strings.Contains(events[i].Request.URI, uriFilter) {
+			return &events[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("no analytics events found with URI containing '%s' (total events: %d)", uriFilter, len(events))
 }
 
 // theLatestAnalyticsEventShouldHaveRequestURI verifies the request URI in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestURI(expectedURI string) error {
-	event, err := a.getLatestAnalyticsEvent()
+	// Pass expectedURI as filter to get only matching events
+	event, err := a.getLatestAnalyticsEvent(expectedURI)
 	if err != nil {
 		return err
 	}
-	
+
+	// Store the matched event for subsequent validation steps
+	a.lastMatchedEvent = event
+
 	// URI may include query params, check if it contains the expected path
 	if !strings.Contains(event.Request.URI, expectedURI) {
 		return fmt.Errorf("expected URI to contain '%s', but got '%s'", expectedURI, event.Request.URI)
 	}
-	
+
 	return nil
 }
 
 // theLatestAnalyticsEventShouldHaveRequestMethod verifies the request method in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveRequestMethod(expectedMethod string) error {
-	event, err := a.getLatestAnalyticsEvent()
-	if err != nil {
-		return err
+	// Use the last matched event if available, otherwise fetch latest without filter
+	event := a.lastMatchedEvent
+	if event == nil {
+		var err error
+		event, err = a.getLatestAnalyticsEvent("")
+		if err != nil {
+			return err
+		}
 	}
-	
+
 	if event.Request.Verb != expectedMethod {
 		return fmt.Errorf("expected method '%s', but got '%s'", expectedMethod, event.Request.Verb)
 	}
-	
+
 	return nil
 }
 
 // theLatestAnalyticsEventShouldHaveResponseStatus verifies the response status in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveResponseStatus(expectedStatus int) error {
-	event, err := a.getLatestAnalyticsEvent()
-	if err != nil {
-		return err
+	// Use the last matched event if available, otherwise fetch latest without filter
+	event := a.lastMatchedEvent
+	if event == nil {
+		var err error
+		event, err = a.getLatestAnalyticsEvent("")
+		if err != nil {
+			return err
+		}
 	}
-	
+
 	if event.Response.Status != expectedStatus {
 		return fmt.Errorf("expected status %d, but got %d", expectedStatus, event.Response.Status)
 	}
-	
+
 	return nil
 }
 
 // theLatestAnalyticsEventShouldHaveMetadataField verifies a metadata field in the latest event
 func (a *AnalyticsSteps) theLatestAnalyticsEventShouldHaveMetadataField(fieldName, expectedValue string) error {
-	event, err := a.getLatestAnalyticsEvent()
-	if err != nil {
-		return err
+	// Use the last matched event if available, otherwise fetch latest without filter
+	event := a.lastMatchedEvent
+	if event == nil {
+		var err error
+		event, err = a.getLatestAnalyticsEvent("")
+		if err != nil {
+			return err
+		}
 	}
-	
+
 	if event.Metadata == nil {
 		return fmt.Errorf("event has no metadata")
 	}
-	
+
 	actualValue, ok := event.Metadata[fieldName]
 	if !ok {
 		return fmt.Errorf("metadata field '%s' not found", fieldName)
 	}
-	
+
 	actualValueStr := fmt.Sprintf("%v", actualValue)
 	if actualValueStr != expectedValue {
 		return fmt.Errorf("expected metadata field '%s' to be '%s', but got '%s'", fieldName, expectedValue, actualValueStr)
 	}
-	
+
 	return nil
 }
 

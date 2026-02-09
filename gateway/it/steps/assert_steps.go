@@ -436,6 +436,23 @@ func truncate(s string, max int) string {
 	return s[:max] + "..."
 }
 
+// extractEchoedHeaders extracts headers from response body, supporting multiple backend formats
+func extractEchoedHeaders(data map[string]interface{}) (map[string]interface{}, error) {
+	// Try sample-backend format: Request.Header
+	if request, ok := data["Request"].(map[string]interface{}); ok {
+		if header, ok := request["Header"].(map[string]interface{}); ok {
+			return header, nil
+		}
+	}
+
+	// Try top-level headers field (for other backends like httpbin)
+	if headers, ok := data["headers"].(map[string]interface{}); ok {
+		return headers, nil
+	}
+
+	return nil, fmt.Errorf("response does not contain headers field or is not a map")
+}
+
 // echoedHeaderShouldBe asserts an echoed header value from sample-backend JSON response
 // Sample-backend returns headers in the JSON response under the "headers" field
 func (a *AssertSteps) echoedHeaderShouldBe(headerName, expected string) error {
@@ -445,9 +462,9 @@ func (a *AssertSteps) echoedHeaderShouldBe(headerName, expected string) error {
 		return fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
-	headers, ok := data["headers"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("response does not contain headers field or is not a map")
+	headers, err := extractEchoedHeaders(data)
+	if err != nil {
+		return err
 	}
 
 	// Headers are case-insensitive, normalize to lowercase
@@ -497,9 +514,9 @@ func (a *AssertSteps) echoedHeaderShouldHaveBothValues(headerName, value1, value
 		return fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
-	headers, ok := data["headers"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("response does not contain headers field or is not a map")
+	headers, err := extractEchoedHeaders(data)
+	if err != nil {
+		return err
 	}
 
 	normalizedName := strings.ToLower(headerName)
@@ -562,8 +579,8 @@ func (a *AssertSteps) echoedHeaderShouldNotExist(headerName string) error {
 		return fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
-	headers, ok := data["headers"].(map[string]interface{})
-	if !ok {
+	headers, err := extractEchoedHeaders(data)
+	if err != nil {
 		// No headers field means header doesn't exist
 		return nil
 	}
@@ -587,9 +604,9 @@ func (a *AssertSteps) echoedHeaderShouldContain(headerName, expected string) err
 		return fmt.Errorf("failed to parse JSON response: %w", err)
 	}
 
-	headers, ok := data["headers"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("response does not contain headers field or is not a map")
+	headers, err := extractEchoedHeaders(data)
+	if err != nil {
+		return err
 	}
 
 	normalizedName := strings.ToLower(headerName)

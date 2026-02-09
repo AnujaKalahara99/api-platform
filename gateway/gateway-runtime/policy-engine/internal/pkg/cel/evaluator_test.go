@@ -562,6 +562,250 @@ func TestEvaluateRequestCondition_MethodComparison(t *testing.T) {
 }
 
 // =============================================================================
+// Header Operation Tests
+// =============================================================================
+
+func TestEvaluateRequestCondition_HeaderOperations(t *testing.T) {
+	evaluator, err := NewCELEvaluator()
+	require.NoError(t, err)
+
+	// Create context with headers
+	ctx := testutils.NewTestRequestContextWithHeaders(map[string][]string{
+		"authorization": {"Bearer token123"},
+		"content-type":  {"application/json"},
+		"x-api-key":     {"sk-test-key"},
+		"user-agent":    {"test-agent/1.0"},
+	})
+	ctx.Method = "POST"
+	ctx.Path = "/api/v1/test"
+
+	tests := []struct {
+		name       string
+		expression string
+		expected   bool
+	}{
+		{
+			name:       "header exists - authorization present",
+			expression: `"authorization" in request.Headers`,
+			expected:   true,
+		},
+		{
+			name:       "header exists - x-api-key present",
+			expression: `"x-api-key" in request.Headers`,
+			expected:   true,
+		},
+		{
+			name:       "header exists - missing header",
+			expression: `"x-missing-header" in request.Headers`,
+			expected:   false,
+		},
+		{
+			name:       "header value check - exact match",
+			expression: `request.Headers["content-type"][0] == "application/json"`,
+			expected:   true,
+		},
+		{
+			name:       "header value check - wrong value",
+			expression: `request.Headers["content-type"][0] == "text/html"`,
+			expected:   false,
+		},
+		{
+			name:       "header value prefix check",
+			expression: `request.Headers["authorization"][0].startsWith("Bearer")`,
+			expected:   true,
+		},
+		{
+			name:       "header value contains",
+			expression: `request.Headers["user-agent"][0].contains("test-agent")`,
+			expected:   true,
+		},
+		{
+			name:       "multiple header conditions - AND",
+			expression: `"authorization" in request.Headers && "x-api-key" in request.Headers`,
+			expected:   true,
+		},
+		{
+			name:       "multiple header conditions - OR",
+			expression: `"authorization" in request.Headers || "x-missing" in request.Headers`,
+			expected:   true,
+		},
+		{
+			name:       "header and method condition",
+			expression: `"x-api-key" in request.Headers && request.Method == "POST"`,
+			expected:   true,
+		},
+		{
+			name:       "header value starts with specific prefix",
+			expression: `request.Headers["x-api-key"][0].startsWith("sk-")`,
+			expected:   true,
+		},
+		{
+			name:       "combined header value and path check",
+			expression: `request.Headers["content-type"][0] == "application/json" && request.Path.startsWith("/api")`,
+			expected:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.EvaluateRequestCondition(tt.expression, ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEvaluateRequestCondition_HeaderOperations_EmptyHeaders(t *testing.T) {
+	evaluator, err := NewCELEvaluator()
+	require.NoError(t, err)
+
+	// Create context with no headers
+	ctx := testutils.NewTestRequestContextWithHeaders(map[string][]string{})
+	ctx.Method = "GET"
+	ctx.Path = "/api/test"
+
+	tests := []struct {
+		name       string
+		expression string
+		expected   bool
+	}{
+		{
+			name:       "check for missing header in empty headers",
+			expression: `"authorization" in request.Headers`,
+			expected:   false,
+		},
+		{
+			name:       "check for any header in empty headers",
+			expression: `"content-type" in request.Headers`,
+			expected:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.EvaluateRequestCondition(tt.expression, ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEvaluateResponseCondition_HeaderOperations(t *testing.T) {
+	evaluator, err := NewCELEvaluator()
+	require.NoError(t, err)
+
+	// Create response context with request and response headers
+	ctx := testutils.NewTestResponseContext()
+	ctx.RequestHeaders = policy.NewHeaders(map[string][]string{
+		"authorization": {"Bearer token123"},
+		"content-type":  {"application/json"},
+	})
+	ctx.ResponseHeaders = policy.NewHeaders(map[string][]string{
+		"content-type":   {"application/json; charset=utf-8"},
+		"cache-control":  {"no-cache"},
+		"x-request-id":   {"req-123"},
+		"content-length": {"1024"},
+	})
+	ctx.ResponseStatus = 200
+
+	tests := []struct {
+		name       string
+		expression string
+		expected   bool
+	}{
+		{
+			name:       "response header exists",
+			expression: `"content-type" in response.ResponseHeaders`,
+			expected:   true,
+		},
+		{
+			name:       "response header missing",
+			expression: `"x-missing" in response.ResponseHeaders`,
+			expected:   false,
+		},
+		{
+			name:       "response header value check",
+			expression: `response.ResponseHeaders["cache-control"][0] == "no-cache"`,
+			expected:   true,
+		},
+		{
+			name:       "response header value contains",
+			expression: `response.ResponseHeaders["content-type"][0].contains("application/json")`,
+			expected:   true,
+		},
+		{
+			name:       "request header exists in response phase",
+			expression: `"authorization" in response.RequestHeaders`,
+			expected:   true,
+		},
+		{
+			name:       "request header value in response phase",
+			expression: `response.RequestHeaders["authorization"][0].startsWith("Bearer")`,
+			expected:   true,
+		},
+		{
+			name:       "combined request and response headers",
+			expression: `"authorization" in response.RequestHeaders && "content-type" in response.ResponseHeaders`,
+			expected:   true,
+		},
+		{
+			name:       "response header and status check",
+			expression: `"x-request-id" in response.ResponseHeaders && response.ResponseStatus == 200`,
+			expected:   true,
+		},
+		{
+			name:       "check both request and response content-type",
+			expression: `response.RequestHeaders["content-type"][0] == "application/json" && response.ResponseHeaders["content-type"][0].contains("application/json")`,
+			expected:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.EvaluateResponseCondition(tt.expression, ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEvaluateResponseCondition_HeaderOperations_EmptyHeaders(t *testing.T) {
+	evaluator, err := NewCELEvaluator()
+	require.NoError(t, err)
+
+	// Create response context with empty headers
+	ctx := testutils.NewTestResponseContext()
+	ctx.RequestHeaders = policy.NewHeaders(map[string][]string{})
+	ctx.ResponseHeaders = policy.NewHeaders(map[string][]string{})
+	ctx.ResponseStatus = 200
+
+	tests := []struct {
+		name       string
+		expression string
+		expected   bool
+	}{
+		{
+			name:       "check for missing request header",
+			expression: `"authorization" in response.RequestHeaders`,
+			expected:   false,
+		},
+		{
+			name:       "check for missing response header",
+			expression: `"content-type" in response.ResponseHeaders`,
+			expected:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.EvaluateResponseCondition(tt.expression, ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// =============================================================================
 // Real World Expression Tests
 // =============================================================================
 

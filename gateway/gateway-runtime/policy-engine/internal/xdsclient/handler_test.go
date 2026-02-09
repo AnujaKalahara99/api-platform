@@ -458,3 +458,98 @@ func TestHandlePolicyChainUpdate_RouteWithEmptyKey(t *testing.T) {
 	err = handler.HandlePolicyChainUpdate(ctx, resources, "v1")
 	assert.NoError(t, err)
 }
+
+// =============================================================================
+// buildPolicyChain Tests
+// =============================================================================
+
+func TestBuildPolicyChain_EmptyConfig(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := &registry.PolicyRegistry{
+		Definitions: make(map[string]*policy.PolicyDefinition),
+		Factories:   make(map[string]policy.PolicyFactory),
+	}
+	handler := NewResourceHandler(k, reg)
+
+	config := &policyenginev1.PolicyChain{
+		RouteKey: "test-route",
+		Policies: []policyenginev1.PolicyInstance{},
+	}
+
+	metadata := policyenginev1.Metadata{
+		APIId:   "api-123",
+		APIName: "test-api",
+		Version: "v1",
+	}
+
+	chain, err := handler.buildPolicyChain("test-route", config, metadata)
+
+	require.NoError(t, err)
+	require.NotNil(t, chain)
+	assert.Empty(t, chain.Policies)
+	assert.Empty(t, chain.PolicySpecs)
+	assert.False(t, chain.RequiresRequestBody)
+	assert.False(t, chain.RequiresResponseBody)
+	assert.False(t, chain.HasExecutionConditions)
+}
+
+func TestBuildPolicyChain_UnknownPolicy(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := &registry.PolicyRegistry{
+		Definitions: make(map[string]*policy.PolicyDefinition),
+		Factories:   make(map[string]policy.PolicyFactory),
+	}
+	handler := NewResourceHandler(k, reg)
+
+	config := &policyenginev1.PolicyChain{
+		RouteKey: "test-route",
+		Policies: []policyenginev1.PolicyInstance{
+			{
+				Name:    "unknown-policy",
+				Version: "v1.0.0",
+				Enabled: true,
+			},
+		},
+	}
+
+	metadata := policyenginev1.Metadata{
+		APIId:   "api-123",
+		APIName: "test-api",
+		Version: "v1",
+	}
+
+	chain, err := handler.buildPolicyChain("test-route", config, metadata)
+
+	assert.Error(t, err)
+	assert.Nil(t, chain)
+	assert.Contains(t, err.Error(), "failed to create policy instance")
+}
+
+func TestBuildPolicyChain_MetadataPropagation(t *testing.T) {
+	k := kernel.NewKernel()
+	reg := &registry.PolicyRegistry{
+		Definitions: make(map[string]*policy.PolicyDefinition),
+		Factories:   make(map[string]policy.PolicyFactory),
+	}
+	handler := NewResourceHandler(k, reg)
+
+	config := &policyenginev1.PolicyChain{
+		RouteKey: "test-route",
+		Policies: []policyenginev1.PolicyInstance{},
+	}
+
+	metadata := policyenginev1.Metadata{
+		APIId:   "api-456",
+		APIName: "my-api",
+		Version: "v2",
+	}
+
+	chain, err := handler.buildPolicyChain("test-route", config, metadata)
+
+	require.NoError(t, err)
+	require.NotNil(t, chain)
+
+	// Verify chain is created successfully (metadata is passed to policy instances, not stored in chain)
+	assert.Empty(t, chain.Policies)
+	assert.Empty(t, chain.PolicySpecs)
+}
