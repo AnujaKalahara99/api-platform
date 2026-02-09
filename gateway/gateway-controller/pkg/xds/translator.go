@@ -175,6 +175,14 @@ func (t *Translator) TranslateConfigs(
 	clusterMap := make(map[string]*cluster.Cluster)
 
 	for _, cfg := range configs {
+		// Skip undeployed APIs - they should not appear in xDS routes
+		if cfg.Status == models.StatusUndeployed {
+			log.Debug("Skipping undeployed API in xDS translation",
+				slog.String("id", cfg.ID),
+				slog.String("displayName", cfg.GetDisplayName()))
+			continue
+		}
+
 		// Include ALL configs (both deployed and pending) in the snapshot
 		// This ensures existing APIs are not overridden when deploying new APIs
 

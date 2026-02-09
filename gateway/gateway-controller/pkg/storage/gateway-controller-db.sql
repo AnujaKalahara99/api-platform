@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     handle TEXT NOT NULL UNIQUE,        -- API handle (e.g., petstore-v1.0)
 
     -- Deployment status
-    status TEXT NOT NULL CHECK(status IN ('pending', 'deployed', 'failed')),
+    status TEXT NOT NULL CHECK(status IN ('pending', 'deployed', 'failed', 'undeployed')),
 
     -- Timestamps
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

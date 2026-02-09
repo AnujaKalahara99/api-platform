@@ -340,6 +340,11 @@ func (s *APIServer) SearchDeployments(c *gin.Context, kind string) {
 		// Return MCP proxy format
 		mcpItems := make([]api.MCPProxyListItem, 0)
 		for _, cfg := range configs {
+			// Skip undeployed from search results
+			if cfg.Status == models.StatusUndeployed {
+				continue
+			}
+
 			if v, ok := filters["displayName"]; ok && cfg.GetDisplayName() != v {
 				continue
 			}
@@ -388,6 +393,11 @@ func (s *APIServer) SearchDeployments(c *gin.Context, kind string) {
 		// Return API format
 		apiItems := make([]api.APIListItem, 0)
 		for _, cfg := range configs {
+			// Skip undeployed from search results
+			if cfg.Status == models.StatusUndeployed {
+				continue
+			}
+
 			if v, ok := filters["displayName"]; ok && cfg.GetDisplayName() != v {
 				continue
 			}
@@ -2298,6 +2308,8 @@ func (s *APIServer) GetConfigDump(c *gin.Context) {
 			status = api.ConfigDumpAPIMetadataStatusFailed
 		case models.StatusPending:
 			status = api.ConfigDumpAPIMetadataStatusPending
+		case models.StatusUndeployed:
+			status = api.ConfigDumpAPIMetadataStatusUndeployed
 		default:
 			status = api.ConfigDumpAPIMetadataStatusPending
 		}

@@ -29,9 +29,10 @@ import (
 type ConfigStatus string
 
 const (
-	StatusPending  ConfigStatus = "pending"  // Submitted but not yet deployed
-	StatusDeployed ConfigStatus = "deployed" // Active in Router
-	StatusFailed   ConfigStatus = "failed"   // Deployment failed
+	StatusPending    ConfigStatus = "pending"    // Submitted but not yet deployed
+	StatusDeployed   ConfigStatus = "deployed"   // Active in Router
+	StatusFailed     ConfigStatus = "failed"     // Deployment failed
+	StatusUndeployed ConfigStatus = "undeployed" // Removed from Router but config preserved
 )
 
 // StoredConfig represents the configuration stored in the database and in-memory
