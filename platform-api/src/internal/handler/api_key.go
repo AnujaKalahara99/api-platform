@@ -79,7 +79,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 
 	// If user has provided a name, use it. Otherwise, generate a name from the display name.
 	var name string
-	if (req.Name != "") {
+	if req.Name != "" {
 		name = req.Name
 	} else {
 		name, err := utils.GenerateHandle(req.DisplayName, nil)
@@ -130,6 +130,7 @@ func (h *APIKeyHandler) CreateAPIKey(c *gin.Context) {
 		Message: "API key created and broadcasted to gateways successfully",
 	})
 }
+
 // UpdateAPIKey handles PUT /api/v1/apis/{apiId}/api-keys/{keyName}
 // This endpoint allows external platforms to update/regenerate external API keys on hybrid gateways
 func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
@@ -198,7 +199,7 @@ func (h *APIKeyHandler) UpdateAPIKey(c *gin.Context) {
 		return
 	}
 
-	log.Printf("[INFO] Successfully updated API key: apiId=%s orgId=%s keyName=%s",
+	log.Printf("[INFO] Successfully updated API key: apiHandle=%s orgId=%s keyName=%s",
 		apiHandle, orgId, keyName)
 
 	// Return success response
