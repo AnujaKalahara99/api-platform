@@ -33,6 +33,7 @@ import (
 // GatewayInternalAPIService handles internal gateway API operations
 type GatewayInternalAPIService struct {
 	apiRepo        repository.APIRepository
+	providerRepo   repository.LLMProviderRepository
 	deploymentRepo repository.DeploymentRepository
 	gatewayRepo    repository.GatewayRepository
 	orgRepo        repository.OrganizationRepository
@@ -42,11 +43,12 @@ type GatewayInternalAPIService struct {
 }
 
 // NewGatewayInternalAPIService creates a new gateway internal API service
-func NewGatewayInternalAPIService(apiRepo repository.APIRepository, deploymentRepo repository.DeploymentRepository,
-	gatewayRepo repository.GatewayRepository, orgRepo repository.OrganizationRepository,
-	projectRepo repository.ProjectRepository, cfg *config.Server) *GatewayInternalAPIService {
+func NewGatewayInternalAPIService(apiRepo repository.APIRepository, providerRepo repository.LLMProviderRepository,
+	deploymentRepo repository.DeploymentRepository, gatewayRepo repository.GatewayRepository,
+	orgRepo repository.OrganizationRepository, projectRepo repository.ProjectRepository, cfg *config.Server) *GatewayInternalAPIService {
 	return &GatewayInternalAPIService{
 		apiRepo:        apiRepo,
+		providerRepo:   providerRepo,
 		deploymentRepo: deploymentRepo,
 		gatewayRepo:    gatewayRepo,
 		orgRepo:        orgRepo,
@@ -116,6 +118,31 @@ func (s *GatewayInternalAPIService) GetActiveDeploymentByGateway(apiID, orgID, g
 		apiID: apiYaml,
 	}
 	return apiYamlMap, nil
+}
+
+// GetActiveLLMProviderDeploymentByGateway retrieves the currently deployed LLM provider artifact for a specific gateway
+func (s *GatewayInternalAPIService) GetActiveLLMProviderDeploymentByGateway(providerID, orgID, gatewayID string) (map[string]string, error) {
+	provider, err := s.providerRepo.GetByID(providerID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get LLM provider: %w", err)
+	}
+	if provider == nil {
+		return nil, constants.ErrLLMProviderNotFound
+	}
+
+	deployment, err := s.deploymentRepo.GetCurrentByGateway(provider.UUID, gatewayID, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+	if deployment == nil {
+		return nil, constants.ErrDeploymentNotActive
+	}
+
+	providerYaml := string(deployment.Content)
+	providerYamlMap := map[string]string{
+		providerID: providerYaml,
+	}
+	return providerYamlMap, nil
 }
 
 // CreateGatewayDeployment handles the registration of an API deployment from a gateway

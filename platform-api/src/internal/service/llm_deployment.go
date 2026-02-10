@@ -147,10 +147,22 @@ func (s *LLMProviderDeploymentService) DeployLLMProvider(providerID string, req 
 		return nil, fmt.Errorf("failed to create deployment: %w", err)
 	}
 
-	// NOTE: LLM provider deployment events are not broadcast yet. This can be
-	// enabled once gateway-side event handling is available.
+	// Broadcast LLM provider deployment event to gateway
 	if s.gatewayEventsService != nil {
-		log.Printf("[INFO] LLM provider deployment created: providerId=%s deploymentId=%s gatewayId=%s", providerID, deploymentID, req.GatewayID)
+		vhost := ""
+		if provider.Configuration.VHost != nil {
+			vhost = *provider.Configuration.VHost
+		}
+		deploymentEvent := &model.LLMProviderDeploymentEvent{
+			ProviderId:   provider.ID,
+			DeploymentID: deploymentID,
+			Vhost:        vhost,
+			Environment:  "production",
+		}
+
+		if err := s.gatewayEventsService.BroadcastLLMProviderDeploymentEvent(req.GatewayID, deploymentEvent); err != nil {
+			log.Printf("[WARN] Failed to broadcast LLM provider deployment event: %v", err)
+		}
 	}
 
 	deployedStatus := model.DeploymentStatusDeployed
@@ -208,6 +220,24 @@ func (s *LLMProviderDeploymentService) RestoreLLMProviderDeployment(providerID, 
 		return nil, fmt.Errorf("failed to set current deployment: %w", err)
 	}
 
+	// Broadcast LLM provider deployment event to gateway
+	if s.gatewayEventsService != nil {
+		vhost := ""
+		if provider.Configuration.VHost != nil {
+			vhost = *provider.Configuration.VHost
+		}
+		deploymentEvent := &model.LLMProviderDeploymentEvent{
+			ProviderId:   provider.ID,
+			DeploymentID: deploymentID,
+			Vhost:        vhost,
+			Environment:  "production",
+		}
+
+		if err := s.gatewayEventsService.BroadcastLLMProviderDeploymentEvent(targetDeployment.GatewayID, deploymentEvent); err != nil {
+			log.Printf("[WARN] Failed to broadcast LLM provider deployment event: %v", err)
+		}
+	}
+
 	deployedStatus := model.DeploymentStatusDeployed
 	return &dto.DeploymentResponse{
 		DeploymentID:     targetDeployment.DeploymentID,
@@ -256,6 +286,23 @@ func (s *LLMProviderDeploymentService) UndeployLLMProviderDeployment(providerID,
 	newUpdatedAt, err := s.deploymentRepo.SetCurrent(provider.UUID, orgUUID, deployment.GatewayID, deploymentID, model.DeploymentStatusUndeployed)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update deployment status: %w", err)
+	}
+
+	// Broadcast LLM provider undeployment event to gateway
+	if s.gatewayEventsService != nil {
+		vhost := ""
+		if provider.Configuration.VHost != nil {
+			vhost = *provider.Configuration.VHost
+		}
+		undeploymentEvent := &model.LLMProviderUndeploymentEvent{
+			ProviderId:  provider.ID,
+			Vhost:       vhost,
+			Environment: "production",
+		}
+
+		if err := s.gatewayEventsService.BroadcastLLMProviderUndeploymentEvent(deployment.GatewayID, undeploymentEvent); err != nil {
+			log.Printf("[WARN] Failed to broadcast LLM provider undeployment event: %v", err)
+		}
 	}
 
 	undeployedStatus := model.DeploymentStatusUndeployed

@@ -74,6 +74,35 @@ type APIUndeploymentEvent struct {
 	Environment string `json:"environment"`
 }
 
+// LLMProviderDeploymentEvent contains payload data for "llmprovider.deployed" event type.
+// This event is sent when an LLM provider is successfully deployed to a gateway.
+type LLMProviderDeploymentEvent struct {
+	// ProviderId identifies the deployed LLM provider (handle)
+	ProviderId string `json:"providerId"`
+
+	// DeploymentID identifies the specific deployment artifact
+	DeploymentID string `json:"deploymentId"`
+
+	// Vhost specifies the virtual host where the provider is deployed
+	Vhost string `json:"vhost"`
+
+	// Environment specifies the deployment environment
+	Environment string `json:"environment"`
+}
+
+// LLMProviderUndeploymentEvent contains payload data for "llmprovider.undeployed" event type.
+// This event is sent when an LLM provider is undeployed from a gateway.
+type LLMProviderUndeploymentEvent struct {
+	// ProviderId identifies the undeployed LLM provider (handle)
+	ProviderId string `json:"providerId"`
+
+	// Vhost specifies the virtual host from which the provider is undeployed
+	Vhost string `json:"vhost"`
+
+	// Environment specifies the deployment environment
+	Environment string `json:"environment"`
+}
+
 // GatewayConfigEvent contains payload data for "gateway.config.updated" event type.
 // This event is sent when gateway configuration needs to be refreshed.
 type GatewayConfigEvent struct {

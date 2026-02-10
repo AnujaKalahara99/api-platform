@@ -77,6 +77,33 @@ type APIUndeploymentEventDTO struct {
 	Environment string `json:"environment"`
 }
 
+// LLMProviderDeploymentEventDTO is the wire format for LLM provider deployment notifications.
+type LLMProviderDeploymentEventDTO struct {
+	// ProviderId identifies the deployed LLM provider (handle)
+	ProviderId string `json:"providerId"`
+
+	// DeploymentID identifies the specific deployment artifact
+	DeploymentID string `json:"deploymentId"`
+
+	// Vhost specifies the virtual host
+	Vhost string `json:"vhost"`
+
+	// Environment specifies the deployment environment
+	Environment string `json:"environment"`
+}
+
+// LLMProviderUndeploymentEventDTO is the wire format for LLM provider undeployment notifications.
+type LLMProviderUndeploymentEventDTO struct {
+	// ProviderId identifies the undeployed LLM provider (handle)
+	ProviderId string `json:"providerId"`
+
+	// Vhost specifies the virtual host
+	Vhost string `json:"vhost"`
+
+	// Environment specifies the deployment environment
+	Environment string `json:"environment"`
+}
+
 // GatewayConfigEventDTO is the wire format for gateway configuration updates.
 type GatewayConfigEventDTO struct {
 	// ConfigType identifies the configuration category
