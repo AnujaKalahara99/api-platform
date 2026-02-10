@@ -44,8 +44,7 @@ if [ "$COMPONENT" = "gateway" ]; then
     # Update all gateway component images in main docker-compose.yaml
     sed -i.bak \
         -e "s|image: .*/gateway-controller:.*|image: ${DOCKER_REGISTRY}/gateway-controller:$VERSION|" \
-        -e "s|image: .*/policy-engine:.*|image: ${DOCKER_REGISTRY}/policy-engine:$VERSION|" \
-        -e "s|image: .*/gateway-router:.*|image: ${DOCKER_REGISTRY}/gateway-router:$VERSION|" \
+        -e "s|image: .*/gateway-runtime:.*|image: ${DOCKER_REGISTRY}/gateway-runtime:$VERSION|" \
         "$COMPOSE_FILE"
     rm -f "$COMPOSE_FILE.bak"
     echo "Updated $COMPOSE_FILE with gateway version $VERSION"
@@ -54,8 +53,7 @@ if [ "$COMPONENT" = "gateway" ]; then
     if [ -f "$IT_COMPOSE_FILE" ]; then
         sed -i.bak \
             -e "s|image: .*/gateway-controller-coverage:.*|image: ${DOCKER_REGISTRY}/gateway-controller-coverage:$VERSION|" \
-            -e "s|image: .*/policy-engine-coverage:.*|image: ${DOCKER_REGISTRY}/policy-engine-coverage:$VERSION|" \
-            -e "s|image: .*/gateway-router:.*|image: ${DOCKER_REGISTRY}/gateway-router:$VERSION|" \
+            -e "s|image: .*/gateway-runtime-coverage:.*|image: ${DOCKER_REGISTRY}/gateway-runtime-coverage:$VERSION|" \
             "$IT_COMPOSE_FILE"
         rm -f "$IT_COMPOSE_FILE.bak"
         echo "Updated $IT_COMPOSE_FILE with gateway version $VERSION"
