@@ -51,10 +51,8 @@ type Config struct {
 
 // AnalyticsConfig holds analytics configuration
 type AnalyticsConfig struct {
-	Enabled              bool                     `koanf:"enabled"`
-	Publishers           []map[string]interface{} `koanf:"publishers"`
-	GRPCAccessLogCfg     GRPCAccessLogConfig      `koanf:"grpc_access_logs"`
-	AccessLogsServiceCfg AccessLogsServiceConfig  `koanf:"access_logs_service"`
+	Enabled          bool                `koanf:"enabled"`
+	GRPCAccessLogCfg GRPCAccessLogConfig `koanf:"grpc_access_logs"`
 	// AllowPayloads controls whether request and response bodies are captured
 	// into analytics metadata and forwarded to analytics publishers.
 	AllowPayloads bool `koanf:"allow_payloads"`
@@ -205,19 +203,19 @@ type PostgresConfig struct {
 // RouterConfig holds router (Envoy) related configuration
 type RouterConfig struct {
 	AccessLogs    AccessLogsConfig `koanf:"access_logs"`
-	ListenerPort  int             `koanf:"listener_port"`
-	HTTPSEnabled  bool            `koanf:"https_enabled"`
-	HTTPSPort     int             `koanf:"https_port"`
-	GatewayHost   string          `koanf:"gateway_host"`
-	Lua           RouterLuaConfig `koanf:"lua"`
-	LuaScriptPath string          `koanf:"lua_script_path"` // Deprecated: use router.lua.request_transformation.script_path
+	ListenerPort  int              `koanf:"listener_port"`
+	HTTPSEnabled  bool             `koanf:"https_enabled"`
+	HTTPSPort     int              `koanf:"https_port"`
+	GatewayHost   string           `koanf:"gateway_host"`
+	Lua           RouterLuaConfig  `koanf:"lua"`
+	LuaScriptPath string           `koanf:"lua_script_path"` // Deprecated: use router.lua.request_transformation.script_path
 	// Upstream holds upstream-side configuration (TLS and timeouts: route, idle, connect)
-	Upstream       RouterUpstream       `koanf:"upstream"`
-	PolicyEngine   PolicyEngineConfig   `koanf:"policy_engine"`
-	DownstreamTLS  DownstreamTLS        `koanf:"downstream_tls"`
-	EventGateway  EventGatewayConfig   `koanf:"event_gateway"`
-	VHosts        VHostsConfig         `koanf:"vhosts"`
-	TracingServiceName string `koanf:"tracing_service_name"`
+	Upstream           RouterUpstream     `koanf:"upstream"`
+	PolicyEngine       PolicyEngineConfig `koanf:"policy_engine"`
+	DownstreamTLS      DownstreamTLS      `koanf:"downstream_tls"`
+	EventGateway       EventGatewayConfig `koanf:"event_gateway"`
+	VHosts             VHostsConfig       `koanf:"vhosts"`
+	TracingServiceName string             `koanf:"tracing_service_name"`
 
 	// HTTPListener configuration
 	HTTPListener HTTPListenerConfig `koanf:"http_listener"`
@@ -275,7 +273,6 @@ type DownstreamTLS struct {
 	MaximumProtocolVersion string `koanf:"maximum_protocol_version"`
 	Ciphers                string `koanf:"ciphers"`
 }
-
 
 // VHostsConfig for vhosts configuration
 type VHostsConfig struct {
@@ -525,7 +522,7 @@ func defaultConfig() *Config {
 					Timeouts: UpstreamTimeouts{
 						RouteTimeoutInMs:     60000,
 						RouteIdleTimeoutInMs: 300000,
-						ConnectTimeoutInMs:  5000,
+						ConnectTimeoutInMs:   5000,
 					},
 				},
 				PolicyEngine: PolicyEngineConfig{
@@ -595,21 +592,7 @@ func defaultConfig() *Config {
 			},
 		},
 		Analytics: AnalyticsConfig{
-			Enabled:    false,
-			Publishers: []map[string]interface{}{
-				{
-					"type":    "moesif",
-					"enabled": true,
-					"settings": map[string]interface{}{
-						"application_id":       "",
-						"moesif_base_url":      "https://api.moesif.net",
-						"publish_interval":     5,
-						"event_queue_size":     10000,
-						"batch_size":           50,
-						"timer_wakeup_seconds": 3,
-					},
-				},
-			},
+			Enabled: false,
 			GRPCAccessLogCfg: GRPCAccessLogConfig{
 				Mode:                "uds",           // UDS mode by default
 				Host:                "policy-engine", // Only used in TCP mode
@@ -618,15 +601,6 @@ func defaultConfig() *Config {
 				BufferFlushInterval: 1000000000,
 				BufferSizeBytes:     16384,
 				GRPCRequestTimeout:  20000000000,
-			},
-			AccessLogsServiceCfg: AccessLogsServiceConfig{
-				ALSServerPort:   18090,
-				ShutdownTimeout: 600 * time.Second,
-				PublicKeyPath:   "",
-				PrivateKeyPath:  "",
-				ALSPlainText:    true,
-				MaxMessageSize:  1000000000,
-				MaxHeaderLimit:  8192,
 			},
 			AllowPayloads: false,
 		},

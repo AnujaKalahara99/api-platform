@@ -39,22 +39,22 @@ const (
 
 // Moesif represents a Moesif publisher.
 type Moesif struct {
-	cfg      *config.PublisherConfig
-	api      moesifapi.API
-	events   []*models.EventModel
-	mu       sync.Mutex
-	done     chan struct{}
+	cfg       *config.PublisherConfig
+	api       moesifapi.API
+	events    []*models.EventModel
+	mu        sync.Mutex
+	done      chan struct{}
 	closeOnce sync.Once
 }
 
 // MoesifConfig holds the configs specific for the Moesif publisher.
 type MoesifConfig struct {
-	ApplicationID      string `mapstructure:"application_id" default:""`
+	ApplicationID      string `mapstructure:"application_id"`
 	BaseURL            string `mapstructure:"moesif_base_url"`
-	PublishInterval    int    `mapstructure:"publish_interval" default:"5"`
-	EventQueueSize     int    `mapstructure:"event_queue_size" default:"10000"`
-	BatchSize          int    `mapstructure:"batch_size" default:"50"`
-	TimerWakeupSeconds int    `mapstructure:"timer_wakeup_seconds" default:"3"`
+	PublishInterval    int    `mapstructure:"publish_interval"`
+	EventQueueSize     int    `mapstructure:"event_queue_size"`
+	BatchSize          int    `mapstructure:"batch_size"`
+	TimerWakeupSeconds int    `mapstructure:"timer_wakeup_seconds"`
 }
 
 // NewMoesif creates a new Moesif publisher.
@@ -209,7 +209,7 @@ func (m *Moesif) Publish(event *dto.Event) {
 	metadataMap["apiType"] = event.API.APIType
 	metadataMap["apiId"] = event.API.APIID
 	metadataMap["projectId"] = event.API.ProjectID
-	
+
 	// AI Metadata
 	if event.API.APIType == "LlmProvider" {
 		// Safely extract aiMetadata with nil check

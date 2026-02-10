@@ -23,10 +23,10 @@ const (
 	ExtProcFilter     = "envoy.filters.http.ext_proc"
 
 	// Policy Engine Socket Path (matches gateway-controller constant)
-	DefaultPolicyEngineSocketPath = "/app/policy-engine.sock"
+	DefaultPolicyEngineSocketPath = "/var/run/api-platform/policy-engine.sock"
 
-	// ALS Socket Path (matches gateway-controller constant)
-	DefaultALSSocketPath = "/app/als.sock"
+	// Gateway Analytics Socket Path (matches gateway-controller constant)
+	DefaultALSSocketPath = "/var/run/api-platform/gateway-analytics.sock"
 
 	// Tracing Span Names
 	SpanExternalProcessingProcess      = "external_processing.process"

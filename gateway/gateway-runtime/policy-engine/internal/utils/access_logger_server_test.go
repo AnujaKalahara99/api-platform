@@ -235,7 +235,7 @@ func TestStartAccessLogServiceServer_UDS(t *testing.T) {
 	// Create a temp directory for the socket
 	tmpDir := t.TempDir()
 	// Override the default socket path for testing by using TCP fallback
-	// Note: UDS mode uses constants.DefaultALSSocketPath which is /app/als.sock
+	// Note: UDS mode uses constants.DefaultALSSocketPath which is /var/run/api-platform/gateway-analytics.sock
 	// For unit tests, we just verify the server starts and stops cleanly
 
 	cfg := &config.Config{
@@ -251,8 +251,8 @@ func TestStartAccessLogServiceServer_UDS(t *testing.T) {
 		},
 	}
 
-	// For UDS, the socket path is /app/als.sock (constant).
-	// In a unit test environment, /app/ may not exist. We test the TCP path
+	// For UDS, the socket path is /var/run/api-platform/gateway-analytics.sock (constant).
+	// In a unit test environment, /var/run/api-platform/ may not exist. We test the TCP path
 	// thoroughly and test UDS only if the directory is writable.
 	_ = tmpDir
 	_ = cfg

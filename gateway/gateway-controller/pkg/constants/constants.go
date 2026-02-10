@@ -82,11 +82,11 @@ const (
 
 	// Policy Engine
 	PolicyEngineClusterName         = "api-platform/policy-engine"
-	DefaultPolicyEngineSocketPath   = "/app/policy-engine.sock"
+	DefaultPolicyEngineSocketPath   = "/var/run/api-platform/policy-engine.sock"
 
 	// gRPC Access Log Service
 	GRPCAccessLogClusterName = "apip_als_cluster"
-	DefaultALSSocketPath     = "/app/als.sock"
+	DefaultALSSocketPath     = "/var/run/api-platform/gateway-analytics.sock"
 
 	// MCP related constants
 	MCP_RESOURCE_PATH          = "/mcp"

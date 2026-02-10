@@ -134,7 +134,7 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     iputils-ping \
     net-tools
 
-RUN mkdir -p /app /var/run /coverage
+RUN mkdir -p /app /var/run/api-platform /coverage
 
 COPY --from=policy-compiler /workspace/output/policy-engine/policy-engine /app/policy-engine
 COPY router/config/envoy-bootstrap.yaml /etc/envoy/envoy.yaml
@@ -145,8 +145,8 @@ RUN chmod +x /app/policy-engine /usr/local/bin/docker-entrypoint.sh
 
 RUN groupadd -r -g 10001 wso2 && \
     useradd -r -u 10001 -g wso2 -s /sbin/nologin -c "WSO2 Application User" wso2 && \
-    chown -R wso2:wso2 /app /coverage && \
-    chmod -R 755 /app /coverage
+    chown -R wso2:wso2 /app /var/run/api-platform /coverage && \
+    chmod -R 755 /app /var/run/api-platform /coverage
 
 # Set GOCOVERDIR for coverage data collection (only effective when binary is built with -cover)
 ENV GOCOVERDIR=/coverage

@@ -87,7 +87,7 @@ export XDS_SERVER_PORT="${ROUTER_XDS_PORT}"
 # Policy Engine xDS address
 PE_XDS_SERVER="${GATEWAY_CONTROLLER_HOST}:${POLICY_ENGINE_XDS_PORT}"
 
-POLICY_ENGINE_SOCKET="/app/policy-engine.sock"
+POLICY_ENGINE_SOCKET="/var/run/api-platform/policy-engine.sock"
 
 log "Starting Gateway Runtime"
 log "  Gateway Controller: ${GATEWAY_CONTROLLER_HOST}"
