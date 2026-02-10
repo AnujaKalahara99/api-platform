@@ -435,10 +435,6 @@ func TestOperationRequestDTOToModel(t *testing.T) {
 			input: &dto.OperationRequest{
 				Method: "PUT",
 				Path:   "/api/v1/products/{id}",
-				Authentication: &dto.AuthenticationConfig{
-					Required: true,
-					Scopes:   []string{"write:products"},
-				},
 				Policies: []dto.Policy{
 					{
 						Name:    "auth-policy",
@@ -455,10 +451,6 @@ func TestOperationRequestDTOToModel(t *testing.T) {
 			expected: &model.OperationRequest{
 				Method: "PUT",
 				Path:   "/api/v1/products/{id}",
-				Authentication: &model.AuthenticationConfig{
-					Required: true,
-					Scopes:   []string{"write:products"},
-				},
 				Policies: []model.Policy{
 					{
 						Name:    "auth-policy",
@@ -615,10 +607,6 @@ func TestOperationRequestRoundTrip(t *testing.T) {
 	original := &dto.OperationRequest{
 		Method: "POST",
 		Path:   "/api/v1/resources",
-		Authentication: &dto.AuthenticationConfig{
-			Required: true,
-			Scopes:   []string{"write:resources", "admin"},
-		},
 		Policies: []dto.Policy{
 			{
 				ExecutionCondition: &condition1,
@@ -677,7 +665,7 @@ func TestGenerateAPIDeploymentYAMLIncludesPolicies(t *testing.T) {
 
 	condition := "request.path == '/pets'"
 	params := map[string]interface{}{"limit": 10}
-	policies := []dto.Policy{
+	policies := []model.Policy{
 		{
 			ExecutionCondition: &condition,
 			Name:               "rate-limit",
@@ -686,26 +674,27 @@ func TestGenerateAPIDeploymentYAMLIncludesPolicies(t *testing.T) {
 		},
 	}
 
-	api := &dto.API{
-		ID:        "api-123",
+	context := "/pets"
+	api := &model.API{
+		Handle:    "api-123",
 		Name:      "Pets API",
 		Version:   "v1",
-		Context:   "/pets",
 		ProjectID: "project-123",
-		Type:      constants.APITypeHTTP,
-		Policies:  policies,
-		BackendServices: []dto.BackendService{
-			{
-				Endpoints: []dto.BackendEndpoint{
-					{URL: "https://backend.example.com"},
+		Kind:      constants.RestApi,
+		Configuration: model.RestAPIConfig{
+			Context: &context,
+			Policies: policies,
+			Upstream: model.UpstreamConfig{
+				Main: &model.UpstreamEndpoint{
+					URL: "https://backend.example.com",
 				},
 			},
-		},
-		Operations: []dto.Operation{
-			{
-				Request: &dto.OperationRequest{
-					Method: "GET",
-					Path:   "/pets",
+			Operations: []model.Operation{
+				{
+					Request: &model.OperationRequest{
+						Method: "GET",
+						Path:   "/pets",
+					},
 				},
 			},
 		},
@@ -721,8 +710,16 @@ func TestGenerateAPIDeploymentYAMLIncludesPolicies(t *testing.T) {
 		t.Fatalf("failed to unmarshal deployment YAML: %v", err)
 	}
 
-	if !reflect.DeepEqual(deployment.Spec.Policies, policies) {
-		t.Errorf("deployment policies = %v, want %v", deployment.Spec.Policies, policies)
+	expectedPolicies := []dto.Policy{
+		{
+			ExecutionCondition: &condition,
+			Name:               "rate-limit",
+			Params:             &params,
+			Version:            "v1",
+		},
+	}
+	if !reflect.DeepEqual(deployment.Spec.Policies, expectedPolicies) {
+		t.Errorf("deployment policies = %v, want %v", deployment.Spec.Policies, expectedPolicies)
 	}
 }
 

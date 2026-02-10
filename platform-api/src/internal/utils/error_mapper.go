@@ -217,8 +217,18 @@ func GetErrorResponse(err error) (int, interface{}) {
 		return makeError(http.StatusBadRequest, "Invalid API type")
 	case errors.Is(err, constants.ErrInvalidTransport):
 		return makeError(http.StatusBadRequest, "Invalid transport protocol")
-	case errors.Is(err, constants.ErrInvalidAPIDeployment):
+	case errors.Is(err, constants.ErrInvalidDeployment):
 		return makeError(http.StatusBadRequest, "Invalid API deployment")
+	case errors.Is(err, constants.ErrUpstreamRequired):
+		return makeError(http.StatusBadRequest, "Upstream configuration is required")
+
+	// Artifact errors
+	case errors.Is(err, constants.ErrArtifactNotFound):
+		return makeError(http.StatusNotFound, "Artifact not found")
+	case errors.Is(err, constants.ErrArtifactExists):
+		return makeError(http.StatusConflict, "Artifact already exists")
+	case errors.Is(err, constants.ErrArtifactInvalidKind):
+		return makeError(http.StatusBadRequest, "Invalid artifact kind")
 
 	// Gateway errors
 	case errors.Is(err, constants.ErrGatewayNotFound):

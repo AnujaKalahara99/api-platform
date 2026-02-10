@@ -258,6 +258,7 @@ func (s *LLMProviderService) Create(orgUUID, createdBy string, req *dto.LLMProvi
 		return nil, constants.ErrLLMProviderExists
 	}
 
+	contextValue := defaultString(req.Context, "/")
 	m := &model.LLMProvider{
 		OrganizationUUID: orgUUID,
 		ID:               req.ID,
@@ -265,18 +266,18 @@ func (s *LLMProviderService) Create(orgUUID, createdBy string, req *dto.LLMProvi
 		Description:      req.Description,
 		CreatedBy:        createdBy,
 		Version:          req.Version,
-		Context:          defaultString(req.Context, "/"),
-		VHost:            req.VHost,
-		Template:         req.Template,
-		UpstreamURL:      req.Upstream.URL,
-		UpstreamAuth:     mapUpstreamAuth(req.Upstream.Auth),
+		TemplateUUID:     tpl.UUID,
 		OpenAPISpec:      req.OpenAPI,
 		ModelProviders:   mapModelProviders(req.ModelProviders),
-		AccessControl:    mapAccessControl(&req.AccessControl),
-		RateLimiting:     mapRateLimiting(req.RateLimiting),
-		Policies:         mapPolicies(req.Policies),
-		Security:         mapSecurityConfig(req.Security),
 		Status:           llmStatusPending,
+		Configuration: model.LLMProviderConfig{
+			Context:       &contextValue,
+			VHost:         &req.VHost,
+			Upstream:      mapUpstreamConfig(req.Upstream),
+			AccessControl: mapAccessControl(&req.AccessControl),
+			RateLimiting:  mapRateLimiting(req.RateLimiting),
+			Policies:      mapPolicies(req.Policies),
+		},
 	}
 
 	if err := s.repo.Create(m); err != nil {
@@ -293,7 +294,7 @@ func (s *LLMProviderService) Create(orgUUID, createdBy string, req *dto.LLMProvi
 	if created == nil {
 		return nil, constants.ErrLLMProviderNotFound
 	}
-	return mapProviderModelToDTO(created), nil
+	return mapProviderModelToDTO(created, tpl.ID), nil
 }
 
 func (s *LLMProviderService) List(orgUUID string, limit, offset int) (*dto.LLMProviderListResponse, error) {
@@ -315,13 +316,24 @@ func (s *LLMProviderService) List(orgUUID string, limit, offset int) (*dto.LLMPr
 	}
 	resp.List = make([]dto.LLMProviderListItem, 0, len(items))
 	for _, p := range items {
+		// Look up template handle from UUID
+		tplHandle := ""
+		if p.TemplateUUID != "" {
+			tpl, err := s.templateRepo.GetByUUID(p.TemplateUUID, orgUUID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve template for provider %s: %w", p.ID, err)
+			}
+			if tpl != nil {
+				tplHandle = tpl.ID
+			}
+		}
 		resp.List = append(resp.List, dto.LLMProviderListItem{
 			ID:          p.ID,
 			Name:        p.Name,
 			Description: p.Description,
 			CreatedBy:   p.CreatedBy,
 			Version:     p.Version,
-			Template:    p.Template,
+			Template:    tplHandle,
 			Status:      p.Status,
 			CreatedAt:   p.CreatedAt,
 			UpdatedAt:   p.UpdatedAt,
@@ -341,7 +353,18 @@ func (s *LLMProviderService) Get(orgUUID, handle string) (*dto.LLMProvider, erro
 	if m == nil {
 		return nil, constants.ErrLLMProviderNotFound
 	}
-	return mapProviderModelToDTO(m), nil
+	// Look up template handle from UUID
+	tplHandle := ""
+	if m.TemplateUUID != "" {
+		tpl, err := s.templateRepo.GetByUUID(m.TemplateUUID, orgUUID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve template for provider %s: %w", m.ID, err)
+		}
+		if tpl != nil {
+			tplHandle = tpl.ID
+		}
+	}
+	return mapProviderModelToDTO(m, tplHandle), nil
 }
 
 func (s *LLMProviderService) Update(orgUUID, handle string, req *dto.LLMProvider) (*dto.LLMProvider, error) {
@@ -373,24 +396,25 @@ func (s *LLMProviderService) Update(orgUUID, handle string, req *dto.LLMProvider
 		return nil, constants.ErrLLMProviderTemplateNotFound
 	}
 
+	contextValue := defaultString(req.Context, "/")
 	m := &model.LLMProvider{
 		OrganizationUUID: orgUUID,
 		ID:               handle,
 		Name:             req.Name,
 		Description:      req.Description,
 		Version:          req.Version,
-		Context:          defaultString(req.Context, "/"),
-		VHost:            req.VHost,
-		Template:         req.Template,
-		UpstreamURL:      req.Upstream.URL,
-		UpstreamAuth:     mapUpstreamAuth(req.Upstream.Auth),
+		TemplateUUID:     tpl.UUID,
 		OpenAPISpec:      req.OpenAPI,
 		ModelProviders:   mapModelProviders(req.ModelProviders),
-		AccessControl:    mapAccessControl(&req.AccessControl),
-		RateLimiting:     mapRateLimiting(req.RateLimiting),
-		Policies:         mapPolicies(req.Policies),
-		Security:         mapSecurityConfig(req.Security),
 		Status:           llmStatusPending,
+		Configuration: model.LLMProviderConfig{
+			Context:       &contextValue,
+			VHost:         &req.VHost,
+			Upstream:      mapUpstreamConfig(req.Upstream),
+			AccessControl: mapAccessControl(&req.AccessControl),
+			RateLimiting:  mapRateLimiting(req.RateLimiting),
+			Policies:      mapPolicies(req.Policies),
+		},
 	}
 
 	if err := s.repo.Update(m); err != nil {
@@ -407,7 +431,7 @@ func (s *LLMProviderService) Update(orgUUID, handle string, req *dto.LLMProvider
 	if updated == nil {
 		return nil, constants.ErrLLMProviderNotFound
 	}
-	return mapProviderModelToDTO(updated), nil
+	return mapProviderModelToDTO(updated, tpl.ID), nil
 }
 
 func (s *LLMProviderService) Delete(orgUUID, handle string) error {
@@ -457,6 +481,7 @@ func (s *LLMProxyService) Create(orgUUID, createdBy string, req *dto.LLMProxy) (
 		return nil, constants.ErrLLMProxyExists
 	}
 
+	contextValue := defaultString(req.Context, "/")
 	m := &model.LLMProxy{
 		OrganizationUUID: orgUUID,
 		ProjectUUID:      req.ProjectID,
@@ -465,13 +490,15 @@ func (s *LLMProxyService) Create(orgUUID, createdBy string, req *dto.LLMProxy) (
 		Description:      req.Description,
 		CreatedBy:        createdBy,
 		Version:          req.Version,
-		Context:          defaultString(req.Context, "/"),
-		VHost:            req.VHost,
-		Provider:         req.Provider,
+		ProviderUUID:     prov.UUID,
 		OpenAPISpec:      req.OpenAPI,
-		Policies:         mapPolicies(req.Policies),
-		Security:         mapSecurityConfig(req.Security),
 		Status:           llmStatusPending,
+		Configuration: model.LLMProxyConfig{
+			Context:  &contextValue,
+			Vhost:    &req.VHost,
+			Provider: req.Provider,
+			Policies: mapPolicies(req.Policies),
+		},
 	}
 
 	if err := s.repo.Create(m); err != nil {
@@ -538,7 +565,7 @@ func (s *LLMProxyService) List(orgUUID string, projectUUID *string, limit, offse
 			CreatedBy:   p.CreatedBy,
 			Version:     p.Version,
 			ProjectID:   p.ProjectUUID,
-			Provider:    p.Provider,
+			Provider:    p.Configuration.Provider,
 			Status:      p.Status,
 			CreatedAt:   p.CreatedAt,
 			UpdatedAt:   p.UpdatedAt,
@@ -551,21 +578,22 @@ func (s *LLMProxyService) ListByProvider(orgUUID, providerID string, limit, offs
 	if providerID == "" {
 		return nil, constants.ErrInvalidInput
 	}
-	if s.providerRepo != nil {
-		prov, err := s.providerRepo.GetByID(providerID, orgUUID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to validate provider: %w", err)
-		}
-		if prov == nil {
-			return nil, constants.ErrLLMProviderNotFound
-		}
+	if s.providerRepo == nil {
+		return nil, fmt.Errorf("could not initialize llmprovider repository")
+	}
+	prov, err := s.providerRepo.GetByID(providerID, orgUUID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to validate provider: %w", err)
+	}
+	if prov == nil {
+		return nil, constants.ErrLLMProviderNotFound
 	}
 
-	items, err := s.repo.ListByProvider(orgUUID, providerID, limit, offset)
+	items, err := s.repo.ListByProvider(orgUUID, prov.UUID, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list proxies by provider: %w", err)
 	}
-	totalCount, err := s.repo.CountByProvider(orgUUID, providerID)
+	totalCount, err := s.repo.CountByProvider(orgUUID, prov.UUID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count proxies by provider: %w", err)
 	}
@@ -586,7 +614,7 @@ func (s *LLMProxyService) ListByProvider(orgUUID, providerID string, limit, offs
 			CreatedBy:   p.CreatedBy,
 			Version:     p.Version,
 			ProjectID:   p.ProjectUUID,
-			Provider:    p.Provider,
+			Provider:    p.Configuration.Provider,
 			Status:      p.Status,
 			CreatedAt:   p.CreatedAt,
 			UpdatedAt:   p.UpdatedAt,
@@ -629,19 +657,22 @@ func (s *LLMProxyService) Update(orgUUID, handle string, req *dto.LLMProxy) (*dt
 		return nil, constants.ErrLLMProviderNotFound
 	}
 
+	contextValue := defaultString(req.Context, "/")
 	m := &model.LLMProxy{
 		OrganizationUUID: orgUUID,
 		ID:               handle,
 		Name:             req.Name,
 		Description:      req.Description,
 		Version:          req.Version,
-		Context:          defaultString(req.Context, "/"),
-		VHost:            req.VHost,
-		Provider:         req.Provider,
+		ProviderUUID:     prov.UUID,
 		OpenAPISpec:      req.OpenAPI,
-		Policies:         mapPolicies(req.Policies),
-		Security:         mapSecurityConfig(req.Security),
 		Status:           llmStatusPending,
+		Configuration: model.LLMProxyConfig{
+			Context:  &contextValue,
+			Vhost:    &req.VHost,
+			Provider: req.Provider,
+			Policies: mapPolicies(req.Policies),
+		},
 	}
 	if err := s.repo.Update(m); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -682,8 +713,8 @@ func isSQLiteUniqueConstraint(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
-func validateUpstream(u dto.LLMUpstream) error {
-	if u.URL == "" {
+func validateUpstream(u dto.UpstreamConfig) error {
+	if u.Main == nil || (u.Main.URL == "" && u.Main.Ref == "") {
 		return constants.ErrInvalidInput
 	}
 	return nil
@@ -732,11 +763,72 @@ func mapPolicies(in []dto.LLMPolicy) []model.LLMPolicy {
 	return out
 }
 
-func mapUpstreamAuth(in *dto.LLMUpstreamAuth) *model.UpstreamAuth {
+func mapUpstreamAuth(in *dto.UpstreamAuth) *model.UpstreamAuth {
 	if in == nil {
 		return nil
 	}
-	return &model.UpstreamAuth{Type: in.Type, Header: in.Header, Value: in.Value}
+	return &model.UpstreamAuth{
+		Type:   in.Type,
+		Header: in.Header,
+		Value:  in.Value,
+	}
+}
+
+func mapUpstreamConfig(in dto.UpstreamConfig) *model.UpstreamConfig {
+	out := &model.UpstreamConfig{}
+	if in.Main != nil {
+		out.Main = &model.UpstreamEndpoint{
+			URL: in.Main.URL,
+			Ref: in.Main.Ref,
+		}
+		if in.Main.Auth != nil {
+			out.Main.Auth = mapUpstreamAuth(in.Main.Auth)
+		}
+	}
+	if in.Sandbox != nil {
+		out.Sandbox = &model.UpstreamEndpoint{
+			URL: in.Sandbox.URL,
+			Ref: in.Sandbox.Ref,
+		}
+		if in.Sandbox.Auth != nil {
+			out.Sandbox.Auth = mapUpstreamAuth(in.Sandbox.Auth)
+		}
+	}
+	return out
+}
+
+func mapUpstreamConfigToDTO(in *model.UpstreamConfig) dto.UpstreamConfig {
+	if in == nil {
+		return dto.UpstreamConfig{}
+	}
+	out := dto.UpstreamConfig{}
+	if in.Main != nil {
+		out.Main = &dto.UpstreamEndpoint{
+			URL: in.Main.URL,
+			Ref: in.Main.Ref,
+		}
+		if in.Main.Auth != nil {
+			out.Main.Auth = &dto.UpstreamAuth{
+				Type:   in.Main.Auth.Type,
+				Header: in.Main.Auth.Header,
+				Value:  in.Main.Auth.Value,
+			}
+		}
+	}
+	if in.Sandbox != nil {
+		out.Sandbox = &dto.UpstreamEndpoint{
+			URL: in.Sandbox.URL,
+			Ref: in.Sandbox.Ref,
+		}
+		if in.Sandbox.Auth != nil {
+			out.Sandbox.Auth = &dto.UpstreamAuth{
+				Type:   in.Sandbox.Auth.Type,
+				Header: in.Sandbox.Auth.Header,
+				Value:  in.Sandbox.Auth.Value,
+			}
+		}
+	}
+	return out
 }
 
 func mapRateLimiting(in *dto.LLMRateLimitingConfig) *model.LLMRateLimitingConfig {
@@ -791,94 +883,6 @@ func mapResourceWiseRateLimiting(in *dto.ResourceWiseRateLimitingConfig) *model.
 		Default:   *mapRateLimitingLimit(&in.Default),
 		Resources: resources,
 	}
-}
-
-func mapSecurityConfig(in *dto.SecurityConfig) *model.SecurityConfig {
-	if in == nil {
-		return nil
-	}
-	out := &model.SecurityConfig{Enabled: in.Enabled}
-	if in.APIKey != nil {
-		out.APIKey = &model.APIKeySecurity{Enabled: in.APIKey.Enabled, Header: in.APIKey.Header, Query: in.APIKey.Query, Cookie: in.APIKey.Cookie}
-	}
-	if in.OAuth2 != nil {
-		var grantTypes *model.OAuth2GrantTypes
-		if in.OAuth2.GrantTypes != nil {
-			grantTypes = &model.OAuth2GrantTypes{}
-			if in.OAuth2.GrantTypes.AuthorizationCode != nil {
-				grantTypes.AuthorizationCode = &model.AuthorizationCodeGrant{
-					Enabled:     in.OAuth2.GrantTypes.AuthorizationCode.Enabled,
-					CallbackURL: in.OAuth2.GrantTypes.AuthorizationCode.CallbackURL,
-				}
-			}
-			if in.OAuth2.GrantTypes.Implicit != nil {
-				grantTypes.Implicit = &model.ImplicitGrant{
-					Enabled:     in.OAuth2.GrantTypes.Implicit.Enabled,
-					CallbackURL: in.OAuth2.GrantTypes.Implicit.CallbackURL,
-				}
-			}
-			if in.OAuth2.GrantTypes.Password != nil {
-				grantTypes.Password = &model.PasswordGrant{Enabled: in.OAuth2.GrantTypes.Password.Enabled}
-			}
-			if in.OAuth2.GrantTypes.ClientCredentials != nil {
-				grantTypes.ClientCredentials = &model.ClientCredentialsGrant{Enabled: in.OAuth2.GrantTypes.ClientCredentials.Enabled}
-			}
-		}
-		out.OAuth2 = &model.OAuth2Security{GrantTypes: grantTypes, Scopes: in.OAuth2.Scopes}
-	}
-	if in.XHubSignature != nil {
-		out.XHubSignature = &model.XHubSignatureSecurity{
-			Enabled:   in.XHubSignature.Enabled,
-			Header:    in.XHubSignature.Header,
-			Secret:    in.XHubSignature.Secret,
-			Algorithm: in.XHubSignature.Algorithm,
-		}
-	}
-	return out
-}
-
-func mapSecurityConfigDTO(in *model.SecurityConfig) *dto.SecurityConfig {
-	if in == nil {
-		return nil
-	}
-	out := &dto.SecurityConfig{Enabled: in.Enabled}
-	if in.APIKey != nil {
-		out.APIKey = &dto.APIKeySecurity{Enabled: in.APIKey.Enabled, Header: in.APIKey.Header, Query: in.APIKey.Query, Cookie: in.APIKey.Cookie}
-	}
-	if in.OAuth2 != nil {
-		var grantTypes *dto.OAuth2GrantTypes
-		if in.OAuth2.GrantTypes != nil {
-			grantTypes = &dto.OAuth2GrantTypes{}
-			if in.OAuth2.GrantTypes.AuthorizationCode != nil {
-				grantTypes.AuthorizationCode = &dto.AuthorizationCodeGrant{
-					Enabled:     in.OAuth2.GrantTypes.AuthorizationCode.Enabled,
-					CallbackURL: in.OAuth2.GrantTypes.AuthorizationCode.CallbackURL,
-				}
-			}
-			if in.OAuth2.GrantTypes.Implicit != nil {
-				grantTypes.Implicit = &dto.ImplicitGrant{
-					Enabled:     in.OAuth2.GrantTypes.Implicit.Enabled,
-					CallbackURL: in.OAuth2.GrantTypes.Implicit.CallbackURL,
-				}
-			}
-			if in.OAuth2.GrantTypes.Password != nil {
-				grantTypes.Password = &dto.PasswordGrant{Enabled: in.OAuth2.GrantTypes.Password.Enabled}
-			}
-			if in.OAuth2.GrantTypes.ClientCredentials != nil {
-				grantTypes.ClientCredentials = &dto.ClientCredentialsGrant{Enabled: in.OAuth2.GrantTypes.ClientCredentials.Enabled}
-			}
-		}
-		out.OAuth2 = &dto.OAuth2Security{GrantTypes: grantTypes, Scopes: in.OAuth2.Scopes}
-	}
-	if in.XHubSignature != nil {
-		out.XHubSignature = &dto.XHubSignatureSecurity{
-			Enabled:   in.XHubSignature.Enabled,
-			Header:    in.XHubSignature.Header,
-			Secret:    in.XHubSignature.Secret,
-			Algorithm: in.XHubSignature.Algorithm,
-		}
-	}
-	return out
 }
 
 func mapTemplateModelToDTO(m *model.LLMProviderTemplate) *dto.LLMProviderTemplate {
@@ -951,9 +955,17 @@ func mapExtractionIdentifierDTO(m *model.ExtractionIdentifier) *dto.ExtractionId
 	return &dto.ExtractionIdentifier{Location: m.Location, Identifier: m.Identifier}
 }
 
-func mapProviderModelToDTO(m *model.LLMProvider) *dto.LLMProvider {
+func mapProviderModelToDTO(m *model.LLMProvider, templateHandle string) *dto.LLMProvider {
 	if m == nil {
 		return nil
+	}
+	contextValue := ""
+	if m.Configuration.Context != nil {
+		contextValue = *m.Configuration.Context
+	}
+	vhostValue := ""
+	if m.Configuration.VHost != nil {
+		vhostValue = *m.Configuration.VHost
 	}
 	out := &dto.LLMProvider{
 		ID:             m.ID,
@@ -961,37 +973,30 @@ func mapProviderModelToDTO(m *model.LLMProvider) *dto.LLMProvider {
 		Description:    m.Description,
 		CreatedBy:      m.CreatedBy,
 		Version:        m.Version,
-		Context:        m.Context,
-		VHost:          m.VHost,
-		Template:       m.Template,
+		Context:        contextValue,
+		VHost:          vhostValue,
+		Template:       templateHandle,
 		OpenAPI:        m.OpenAPISpec,
 		ModelProviders: mapModelProvidersDTO(m.ModelProviders),
-		RateLimiting:   mapRateLimitingDTO(m.RateLimiting),
-		Upstream: dto.LLMUpstream{
-			URL: m.UpstreamURL,
-		},
-		AccessControl: dto.LLMAccessControl{Mode: "deny_all"},
-		Policies:      nil,
-		Security:      mapSecurityConfigDTO(m.Security),
-		CreatedAt:     m.CreatedAt,
-		UpdatedAt:     m.UpdatedAt,
+		RateLimiting:   mapRateLimitingDTO(m.Configuration.RateLimiting),
+		Upstream:       mapUpstreamConfigToDTO(m.Configuration.Upstream),
+		AccessControl:  dto.LLMAccessControl{Mode: "deny_all"},
+		CreatedAt:      m.CreatedAt,
+		UpdatedAt:      m.UpdatedAt,
 	}
-	if m.UpstreamAuth != nil {
-		out.Upstream.Auth = &dto.LLMUpstreamAuth{Type: m.UpstreamAuth.Type, Header: m.UpstreamAuth.Header}
-	}
-	if m.AccessControl != nil {
-		ac := dto.LLMAccessControl{Mode: m.AccessControl.Mode}
-		if len(m.AccessControl.Exceptions) > 0 {
-			ac.Exceptions = make([]dto.RouteException, 0, len(m.AccessControl.Exceptions))
-			for _, e := range m.AccessControl.Exceptions {
+	if m.Configuration.AccessControl != nil {
+		ac := dto.LLMAccessControl{Mode: m.Configuration.AccessControl.Mode}
+		if len(m.Configuration.AccessControl.Exceptions) > 0 {
+			ac.Exceptions = make([]dto.RouteException, 0, len(m.Configuration.AccessControl.Exceptions))
+			for _, e := range m.Configuration.AccessControl.Exceptions {
 				ac.Exceptions = append(ac.Exceptions, dto.RouteException{Path: e.Path, Methods: e.Methods})
 			}
 		}
 		out.AccessControl = ac
 	}
-	if len(m.Policies) > 0 {
-		out.Policies = make([]dto.LLMPolicy, 0, len(m.Policies))
-		for _, p := range m.Policies {
+	if len(m.Configuration.Policies) > 0 {
+		out.Policies = make([]dto.LLMPolicy, 0, len(m.Configuration.Policies))
+		for _, p := range m.Configuration.Policies {
 			paths := make([]dto.LLMPolicyPath, 0, len(p.Paths))
 			for _, pp := range p.Paths {
 				paths = append(paths, dto.LLMPolicyPath{Path: pp.Path, Methods: pp.Methods, Params: pp.Params})
@@ -1254,6 +1259,14 @@ func mapProxyModelToDTO(m *model.LLMProxy) *dto.LLMProxy {
 	if m == nil {
 		return nil
 	}
+	contextValue := ""
+	if m.Configuration.Context != nil {
+		contextValue = *m.Configuration.Context
+	}
+	vhostValue := ""
+	if m.Configuration.Vhost != nil {
+		vhostValue = *m.Configuration.Vhost
+	}
 	out := &dto.LLMProxy{
 		ID:          m.ID,
 		Name:        m.Name,
@@ -1261,17 +1274,16 @@ func mapProxyModelToDTO(m *model.LLMProxy) *dto.LLMProxy {
 		CreatedBy:   m.CreatedBy,
 		Version:     m.Version,
 		ProjectID:   m.ProjectUUID,
-		Context:     m.Context,
-		VHost:       m.VHost,
-		Provider:    m.Provider,
+		Context:     contextValue,
+		VHost:       vhostValue,
+		Provider:    m.Configuration.Provider,
 		OpenAPI:     m.OpenAPISpec,
-		Security:    mapSecurityConfigDTO(m.Security),
 		CreatedAt:   m.CreatedAt,
 		UpdatedAt:   m.UpdatedAt,
 	}
-	if len(m.Policies) > 0 {
-		out.Policies = make([]dto.LLMPolicy, 0, len(m.Policies))
-		for _, p := range m.Policies {
+	if len(m.Configuration.Policies) > 0 {
+		out.Policies = make([]dto.LLMPolicy, 0, len(m.Configuration.Policies))
+		for _, p := range m.Configuration.Policies {
 			paths := make([]dto.LLMPolicyPath, 0, len(p.Paths))
 			for _, pp := range p.Paths {
 				paths = append(paths, dto.LLMPolicyPath{Path: pp.Path, Methods: pp.Methods, Params: pp.Params})

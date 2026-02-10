@@ -165,8 +165,8 @@ func (h *GatewayInternalAPIHandler) GetAPI(c *gin.Context) {
 	c.Data(http.StatusOK, "application/zip", zipData)
 }
 
-// CreateGatewayAPIDeployment handles POST /api/internal/v1/apis/{apiId}/gateway-deployments
-func (h *GatewayInternalAPIHandler) CreateGatewayAPIDeployment(c *gin.Context) {
+// CreateGatewayDeployment handles POST /api/internal/v1/apis/{apiId}/gateway-deployments
+func (h *GatewayInternalAPIHandler) CreateGatewayDeployment(c *gin.Context) {
 	// Extract client IP for logging
 	clientIP := c.ClientIP()
 
@@ -204,7 +204,7 @@ func (h *GatewayInternalAPIHandler) CreateGatewayAPIDeployment(c *gin.Context) {
 	}
 
 	// Parse and validate request body
-	var notification dto.APIDeploymentNotification
+	var notification dto.DeploymentNotification
 	if err := c.ShouldBindJSON(&notification); err != nil {
 		log.Printf("[WARN] Invalid request body from IP: %s - error=%v", clientIP, err)
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(400, "Bad Request",
@@ -216,7 +216,7 @@ func (h *GatewayInternalAPIHandler) CreateGatewayAPIDeployment(c *gin.Context) {
 	orgID := gateway.OrganizationID
 	gatewayID := gateway.ID
 
-	response, err := h.gatewayInternalService.CreateGatewayAPIDeployment(
+	response, err := h.gatewayInternalService.CreateGatewayDeployment(
 		apiID, orgID, gatewayID, notification, revisionIDPtr)
 	if err != nil {
 		if errors.Is(err, constants.ErrInvalidInput) {
@@ -255,6 +255,6 @@ func (h *GatewayInternalAPIHandler) RegisterRoutes(r *gin.Engine) {
 	{
 		orgGroup.GET("", h.GetAPIsByOrganization)
 		orgGroup.GET("/:apiId", h.GetAPI)
-		orgGroup.POST("/:apiId/gateway-deployments", h.CreateGatewayAPIDeployment)
+		orgGroup.POST("/:apiId/gateway-deployments", h.CreateGatewayDeployment)
 	}
 }

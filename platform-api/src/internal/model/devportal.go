@@ -90,11 +90,11 @@ type APIDevPortalWithDetails struct {
 	CreatedAt        time.Time `json:"createdAt" db:"created_at"`
 	UpdatedAt        time.Time `json:"updatedAt" db:"updated_at"`
 
-	// Association information (from api_associations table)
+	// Association information (from association_mappings table)
 	AssociatedAt         time.Time `json:"associatedAt" db:"associated_at"`
 	AssociationUpdatedAt time.Time `json:"associationUpdatedAt" db:"association_updated_at"`
 
-	// Publication information (nullable if not published - from api_publications table)
+	// Publication information (nullable if not published - from publication_mappings table)
 	IsPublished           bool       `json:"isPublished" db:"is_published"`
 	PublicationStatus     *string    `json:"publicationStatus,omitempty" db:"publication_status"`
 	APIVersion            *string    `json:"apiVersion,omitempty" db:"api_version"`

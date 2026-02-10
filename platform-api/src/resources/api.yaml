@@ -13,13 +13,6 @@ spec:
   lifeCycleStatus: CREATED
   type: HTTP
   transport: [http, https]
-  mtls:
-    enabled: false
-    enforceIfClientCertPresent: false
-    verifyClient: false
-    clientCert: ""
-    clientKey: ""
-    caCert: ""
   security:
     enabled: true
     apiKey:

@@ -79,6 +79,16 @@ func (h *APIHandler) CreateAPI(c *gin.Context) {
 			"Project ID is required"))
 		return
 	}
+	if req.Upstream == nil {
+		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(400, "Bad Request",
+			"Upstream configuration is required"))
+		return
+	}
+	if req.Upstream.Main == nil && req.Upstream.Sandbox == nil {
+		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(400, "Bad Request",
+			"At least one upstream endpoint (main or sandbox) is required"))
+		return
+	}
 
 	api, err := h.apiService.CreateAPI(&req, orgId)
 	if err != nil {
@@ -233,6 +243,15 @@ func (h *APIHandler) UpdateAPI(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, utils.NewErrorResponse(400, "Bad Request",
 			err.Error()))
 		return
+	}
+
+	// Validate upstream configuration if provided
+	if req.Upstream != nil {
+		if req.Upstream.Main == nil && req.Upstream.Sandbox == nil {
+			c.JSON(http.StatusBadRequest, utils.NewErrorResponse(400, "Bad Request",
+				"At least one upstream endpoint (main or sandbox) is required"))
+			return
+		}
 	}
 
 	api, err := h.apiService.UpdateAPIByHandle(apiId, &req, orgId)

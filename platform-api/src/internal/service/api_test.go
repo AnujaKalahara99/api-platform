@@ -114,7 +114,7 @@ func TestValidateUpdateAPIRequest(t *testing.T) {
 				Handle:  "my-api",
 				Version: "v1",
 			},
-			req:         &UpdateAPIRequest{Type: ptr("INVALID_TYPE")},
+			req:         &UpdateAPIRequest{Kind: ptr("INVALID_TYPE")},
 			wantErr:     true,
 			expectedErr: constants.ErrInvalidAPIType,
 		},
@@ -143,7 +143,7 @@ func TestValidateUpdateAPIRequest(t *testing.T) {
 				Handle:  "my-api",
 				Version: "v1",
 			},
-			req:     &UpdateAPIRequest{Type: ptr("HTTP")},
+			req:     &UpdateAPIRequest{Kind: ptr("RestApi")},
 			wantErr: false,
 		},
 		{
@@ -310,7 +310,7 @@ func TestValidateCreateAPIRequest(t *testing.T) {
 				Context:   "/test",
 				Version:   "v1",
 				ProjectID: "proj-123",
-				Type:      "INVALID_TYPE",
+				Kind:      "INVALID_TYPE",
 			},
 			wantErr:     true,
 			expectedErr: constants.ErrInvalidAPIType,
@@ -348,7 +348,7 @@ func TestValidateCreateAPIRequest(t *testing.T) {
 				Context:   "/test",
 				Version:   "v1",
 				ProjectID: "proj-123",
-				Type:      "HTTP",
+				Kind:      "RestApi",
 			},
 			mockNameVersionExists:    false,
 			wantErr:                  false,
@@ -429,8 +429,10 @@ func TestApplyAPIUpdatesUpdatesPolicies(t *testing.T) {
 	existing := &model.API{
 		Handle:  "pets-api",
 		Version: "v1",
-		Policies: []model.Policy{
-			{Name: "legacy-policy", Version: "v1"},
+		Configuration: model.RestAPIConfig{
+			Policies: []model.Policy{
+				{Name: "legacy-policy", Version: "v1"},
+			},
 		},
 	}
 

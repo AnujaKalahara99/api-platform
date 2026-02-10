@@ -32,27 +32,27 @@ import (
 
 // GatewayInternalAPIService handles internal gateway API operations
 type GatewayInternalAPIService struct {
-	apiRepo         repository.APIRepository
-	gatewayRepo     repository.GatewayRepository
-	orgRepo         repository.OrganizationRepository
-	projectRepo     repository.ProjectRepository
-	upstreamService *UpstreamService
-	apiUtil         *utils.APIUtil
-	cfg             *config.Server
+	apiRepo        repository.APIRepository
+	deploymentRepo repository.DeploymentRepository
+	gatewayRepo    repository.GatewayRepository
+	orgRepo        repository.OrganizationRepository
+	projectRepo    repository.ProjectRepository
+	apiUtil        *utils.APIUtil
+	cfg            *config.Server
 }
 
 // NewGatewayInternalAPIService creates a new gateway internal API service
-func NewGatewayInternalAPIService(apiRepo repository.APIRepository, gatewayRepo repository.GatewayRepository,
-	orgRepo repository.OrganizationRepository, projectRepo repository.ProjectRepository,
-	upstreamSvc *UpstreamService, cfg *config.Server) *GatewayInternalAPIService {
+func NewGatewayInternalAPIService(apiRepo repository.APIRepository, deploymentRepo repository.DeploymentRepository,
+	gatewayRepo repository.GatewayRepository, orgRepo repository.OrganizationRepository,
+	projectRepo repository.ProjectRepository, cfg *config.Server) *GatewayInternalAPIService {
 	return &GatewayInternalAPIService{
-		apiRepo:         apiRepo,
-		gatewayRepo:     gatewayRepo,
-		orgRepo:         orgRepo,
-		projectRepo:     projectRepo,
-		upstreamService: upstreamSvc,
-		apiUtil:         &utils.APIUtil{},
-		cfg:             cfg,
+		apiRepo:        apiRepo,
+		deploymentRepo: deploymentRepo,
+		gatewayRepo:    gatewayRepo,
+		orgRepo:        orgRepo,
+		projectRepo:    projectRepo,
+		apiUtil:        &utils.APIUtil{},
+		cfg:            cfg,
 	}
 }
 
@@ -66,8 +66,7 @@ func (s *GatewayInternalAPIService) GetAPIsByOrganization(orgID string) (map[str
 
 	apiYamlMap := make(map[string]string)
 	for _, api := range apis {
-		apiDTO := s.apiUtil.ModelToDTO(api)
-		apiYaml, err := s.apiUtil.GenerateAPIDeploymentYAML(apiDTO)
+		apiYaml, err := s.apiUtil.GenerateAPIDeploymentYAML(api)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate API YAML: %w", err)
 		}
@@ -89,13 +88,12 @@ func (s *GatewayInternalAPIService) GetAPIByUUID(apiId, orgId string) (map[strin
 		return nil, constants.ErrAPINotFound
 	}
 
-	apiDTO := s.apiUtil.ModelToDTO(apiModel)
-	apiYaml, err := s.apiUtil.GenerateAPIDeploymentYAML(apiDTO)
+	apiYaml, err := s.apiUtil.GenerateAPIDeploymentYAML(apiModel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate API YAML: %w", err)
 	}
 	apiYamlMap := map[string]string{
-		apiDTO.ID: apiYaml,
+		apiModel.Handle: apiYaml,
 	}
 	return apiYamlMap, nil
 }
@@ -103,7 +101,7 @@ func (s *GatewayInternalAPIService) GetAPIByUUID(apiId, orgId string) (map[strin
 // GetActiveDeploymentByGateway retrieves the currently deployed API artifact for a specific gateway
 func (s *GatewayInternalAPIService) GetActiveDeploymentByGateway(apiID, orgID, gatewayID string) (map[string]string, error) {
 	// Get the active deployment for this API on this gateway
-	deployment, err := s.apiRepo.GetCurrentDeploymentByGateway(apiID, gatewayID, orgID)
+	deployment, err := s.deploymentRepo.GetCurrentByGateway(apiID, gatewayID, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
@@ -120,9 +118,9 @@ func (s *GatewayInternalAPIService) GetActiveDeploymentByGateway(apiID, orgID, g
 	return apiYamlMap, nil
 }
 
-// CreateGatewayAPIDeployment handles the registration of an API deployment from a gateway
-func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID, gatewayID string,
-	notification dto.APIDeploymentNotification, revisionID *string) (*dto.GatewayAPIDeploymentResponse, error) {
+// CreateGatewayDeployment handles the registration of an API deployment from a gateway
+func (s *GatewayInternalAPIService) CreateGatewayDeployment(apiHandle, orgID, gatewayID string,
+	notification dto.DeploymentNotification, revisionID *string) (*dto.GatewayDeploymentResponse, error) {
 	// Note: revisionID parameter is reserved for future use
 	_ = revisionID
 
@@ -164,16 +162,6 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 	apiUUID := ""
 	now := time.Now()
 	if existingAPIMetadata == nil {
-		// Create backend services from upstream configurations
-		var backendServiceUUIDs []string
-		for _, upstream := range notification.Configuration.Spec.Upstreams {
-			backendServiceUUID, err := s.upstreamService.CreateBackendServiceFromUpstream(upstream, orgID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create backend service from upstream: %w", err)
-			}
-			backendServiceUUIDs = append(backendServiceUUIDs, backendServiceUUID)
-		}
-
 		// Convert operations from notification to API operations
 		operations := make([]model.Operation, 0, len(notification.Configuration.Spec.Operations))
 		for _, op := range notification.Configuration.Spec.Operations {
@@ -188,23 +176,23 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 			operations = append(operations, operation)
 		}
 
-		// Create new API from notification (without backend services in the model)
-
+		// Create new API from notification
 		newAPI := &model.API{
-			Handle:           apiHandle, // Use provided apiID as handle
-			Name:             notification.Configuration.Spec.Name,
-			Context:          notification.Configuration.Spec.Context,
-			Version:          notification.Configuration.Spec.Version,
-			ProjectID:        projectID,
-			OrganizationID:   orgID,
-			Provider:         "admin", // Default provider
-			LifeCycleStatus:  "CREATED",
-			Type:             "HTTP",
-			Transport:        []string{"http", "https"},
-			IsDefaultVersion: false,
-			Operations:       operations,
-			CreatedAt:        now,
-			UpdatedAt:        now,
+			Handle:          apiHandle, // Use provided apiID as handle
+			Name:            notification.Configuration.Spec.Name,
+			Version:         notification.Configuration.Spec.Version,
+			ProjectID:       projectID,
+			OrganizationID:  orgID,
+			CreatedBy:       "admin", // Default provider
+			LifeCycleStatus: "CREATED",
+			Kind:            notification.Configuration.Kind,
+			Transport:       []string{"http", "https"},
+			Configuration: model.RestAPIConfig{
+				Context:    &notification.Configuration.Spec.Context,
+				Operations: operations,
+			},
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 
 		err = s.apiRepo.CreateAPI(newAPI)
@@ -214,14 +202,6 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 
 		// CreateAPI sets the UUID on the model
 		apiUUID = newAPI.ID
-
-		// Associate backend services with the API
-		for i, backendServiceUUID := range backendServiceUUIDs {
-			isDefault := i == 0 // First backend service is default
-			if err := s.upstreamService.AssociateBackendServiceWithAPI(apiUUID, backendServiceUUID, isDefault); err != nil {
-				return nil, fmt.Errorf("failed to associate backend service with API: %w", err)
-			}
-		}
 
 		apiCreated = true
 	} else {
@@ -233,7 +213,7 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 	}
 
 	// Check if deployment already exists
-	deploymentID, status, _, err := s.apiRepo.GetDeploymentStatus(apiUUID, orgID, gatewayID)
+	deploymentID, status, _, err := s.deploymentRepo.GetStatus(apiUUID, orgID, gatewayID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check deployment status of gateway: %w", err)
 	}
@@ -271,7 +251,7 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 	// If gateway is not associated with the API, create the association
 	if !isAssociated {
 		association := &model.APIAssociation{
-			ApiID:           apiUUID,
+			ArtifactID:      apiUUID,
 			OrganizationID:  orgID,
 			ResourceID:      gatewayID,
 			AssociationType: constants.AssociationTypeGateway,
@@ -293,9 +273,9 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 		return nil, fmt.Errorf("failed to serialize deployment content: %w", err)
 	}
 
-	deployment := &model.APIDeployment{
+	deployment := &model.Deployment{
 		Name:           deploymentName,
-		ApiID:          apiUUID,
+		ArtifactID:     apiUUID,
 		GatewayID:      gatewayID,
 		OrganizationID: orgID,
 		Content:        deploymentContent,
@@ -308,12 +288,12 @@ func (s *GatewayInternalAPIService) CreateGatewayAPIDeployment(apiHandle, orgID,
 		return nil, fmt.Errorf("MaxPerAPIGateway limit config must be at least 1, got %d", s.cfg.Deployments.MaxPerAPIGateway)
 	}
 	hardLimit := s.cfg.Deployments.MaxPerAPIGateway + constants.DeploymentLimitBuffer
-	err = s.apiRepo.CreateDeploymentWithLimitEnforcement(deployment, hardLimit)
+	err = s.deploymentRepo.CreateWithLimitEnforcement(deployment, hardLimit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create deployment record: %w", err)
 	}
 
-	return &dto.GatewayAPIDeploymentResponse{
+	return &dto.GatewayDeploymentResponse{
 		APIId:        apiUUID,
 		DeploymentId: 0, // Legacy field, no longer used with new deployment model
 		Message:      "API deployment registered successfully",

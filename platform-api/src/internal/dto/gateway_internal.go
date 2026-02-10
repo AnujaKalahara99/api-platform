@@ -19,8 +19,8 @@ package dto
 
 import "time"
 
-// APIDeploymentNotification represents the request body for gateway API deployment registration
-type APIDeploymentNotification struct {
+// DeploymentNotification represents the request body for gateway API deployment registration
+type DeploymentNotification struct {
 	ID                string           `json:"id" binding:"required"`
 	Configuration     APIConfiguration `json:"configuration" binding:"required"`
 	Status            string           `json:"status" binding:"required"`
@@ -59,8 +59,8 @@ type BasicOperation struct {
 	Path   string `json:"path" binding:"required"`
 }
 
-// GatewayAPIDeploymentResponse represents the response for successful API deployment registration
-type GatewayAPIDeploymentResponse struct {
+// GatewayDeploymentResponse represents the response for successful API deployment registration
+type GatewayDeploymentResponse struct {
 	APIId        string `json:"apiId"`
 	DeploymentId int64  `json:"deploymentId"`
 	Message      string `json:"message"`

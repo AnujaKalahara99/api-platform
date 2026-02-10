@@ -57,7 +57,7 @@ func (r *APIPublicationRepo) UpsertPublication(publication *model.APIPublication
 
 	// Check if the record exists within the transaction
 	var exists bool
-	checkQuery := `SELECT 1 FROM api_publications WHERE api_uuid = ? AND devportal_uuid = ? AND organization_uuid = ?`
+	checkQuery := `SELECT 1 FROM publication_mappings WHERE api_uuid = ? AND devportal_uuid = ? AND organization_uuid = ?`
 	err = tx.QueryRow(r.db.Rebind(checkQuery), publication.APIUUID, publication.DevPortalUUID, publication.OrganizationUUID).Scan(&exists)
 	if err != nil && err != sql.ErrNoRows {
 		return fmt.Errorf("failed to check existence: %w", err)
@@ -67,7 +67,7 @@ func (r *APIPublicationRepo) UpsertPublication(publication *model.APIPublication
 	if !exists {
 		// Record does not exist, insert it
 		insertQuery := `
-			INSERT INTO api_publications (
+			INSERT INTO publication_mappings (
 				api_uuid, devportal_uuid, organization_uuid,
 				status, api_version, devportal_ref_id,
 				sandbox_endpoint_url, production_endpoint_url,
@@ -85,7 +85,7 @@ func (r *APIPublicationRepo) UpsertPublication(publication *model.APIPublication
 	} else {
 		// Record exists, update it
 		updateQuery := `
-			UPDATE api_publications 
+			UPDATE publication_mappings 
 			SET status = ?, api_version = ?, devportal_ref_id = ?, 
 			    sandbox_endpoint_url = ?, production_endpoint_url = ?, updated_at = ?
 			WHERE api_uuid = ? AND devportal_uuid = ? AND organization_uuid = ?`
@@ -134,7 +134,7 @@ func (r *APIPublicationRepo) Create(publication *model.APIPublication) error {
 	}
 
 	query := `
-		INSERT INTO api_publications (
+		INSERT INTO publication_mappings (
 			api_uuid, devportal_uuid, organization_uuid,
 			status, api_version, devportal_ref_id,
 			sandbox_endpoint_url, production_endpoint_url,
@@ -162,7 +162,7 @@ func (r *APIPublicationRepo) GetByAPIAndDevPortal(apiUUID, devPortalUUID, orgUUI
 			   status, api_version, devportal_ref_id,
 			   sandbox_endpoint_url, production_endpoint_url,
 			   created_at, updated_at
-		FROM api_publications
+		FROM publication_mappings
 		WHERE api_uuid = ? AND devportal_uuid = ? AND organization_uuid = ?`
 
 	row := r.db.QueryRow(r.db.Rebind(query), apiUUID, devPortalUUID, orgUUID)
@@ -192,7 +192,7 @@ func (r *APIPublicationRepo) GetByAPIUUID(apiUUID, orgUUID string) ([]*model.API
 			   status, api_version, devportal_ref_id,
 			   sandbox_endpoint_url, production_endpoint_url,
 			   created_at, updated_at
-		FROM api_publications
+		FROM publication_mappings
 		WHERE api_uuid = ? AND organization_uuid = ?
 		ORDER BY created_at DESC`
 
@@ -234,7 +234,7 @@ func (r *APIPublicationRepo) Update(publication *model.APIPublication) error {
 	}
 
 	query := `
-		UPDATE api_publications 
+		UPDATE publication_mappings 
 		SET status = ?, api_version = ?, devportal_ref_id = ?, 
 		    sandbox_endpoint_url = ?, production_endpoint_url = ?, updated_at = ?
 		WHERE api_uuid = ? AND devportal_uuid = ? AND organization_uuid = ?`
@@ -258,7 +258,7 @@ func (r *APIPublicationRepo) Update(publication *model.APIPublication) error {
 		// Verify if the row still exists (RowsAffected can be 0 for no-op updates)
 		var stillExists bool
 		err = r.db.QueryRow(r.db.Rebind(`
-			SELECT 1 FROM api_publications 
+			SELECT 1 FROM publication_mappings 
 			WHERE api_uuid = ? AND devportal_uuid = ? AND organization_uuid = ?`),
 			publication.APIUUID, publication.DevPortalUUID, publication.OrganizationUUID).Scan(&stillExists)
 		if err == sql.ErrNoRows {
@@ -276,7 +276,7 @@ func (r *APIPublicationRepo) Update(publication *model.APIPublication) error {
 // Delete removes a publication record
 func (r *APIPublicationRepo) Delete(apiUUID, devPortalUUID, orgUUID string) error {
 	query := `
-		DELETE FROM api_publications 
+		DELETE FROM publication_mappings 
 		WHERE api_uuid = ? AND devportal_uuid = ? AND organization_uuid = ?`
 
 	result, err := r.db.Exec(r.db.Rebind(query), apiUUID, devPortalUUID, orgUUID)
@@ -330,15 +330,15 @@ func (r *APIPublicationRepo) GetAPIDevPortalsWithDetails(apiUUID, orgUUID string
 			ap.created_at as published_at,
 			ap.updated_at as publication_updated_at
 			
-		FROM api_associations aa
+		FROM association_mappings aa
 		INNER JOIN devportals d 
 			ON aa.resource_uuid = d.uuid
-		LEFT JOIN api_publications ap 
-			ON ap.api_uuid = aa.api_uuid 
+		LEFT JOIN publication_mappings ap 
+			ON ap.api_uuid = aa.artifact_uuid 
 			AND ap.devportal_uuid = aa.resource_uuid 
 			AND ap.organization_uuid = aa.organization_uuid
 			
-		WHERE aa.api_uuid = ? 
+		WHERE aa.artifact_uuid = ? 
 		  AND aa.organization_uuid = ?
 		  AND aa.association_type = 'dev_portal'
 		ORDER BY aa.created_at DESC`

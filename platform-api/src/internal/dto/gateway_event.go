@@ -50,8 +50,8 @@ type ConnectionAckDTO struct {
 	Timestamp string `json:"timestamp"`
 }
 
-// APIDeploymentEventDTO is the wire format for API deployment notifications.
-type APIDeploymentEventDTO struct {
+// DeploymentEventDTO is the wire format for API deployment notifications.
+type DeploymentEventDTO struct {
 	// ApiId identifies the deployed API
 	ApiId string `json:"apiId"`
 

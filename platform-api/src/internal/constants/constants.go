@@ -65,6 +65,14 @@ var ValidGatewayFunctionalityType = map[string]bool{
 // DefaultGatewayFunctionalityType Default gateway functionality type for new gateways
 const DefaultGatewayFunctionalityType = GatewayFunctionalityTypeRegular
 
+// Kinds of artifacts
+const (
+	RestApi     = "RestApi"
+	WebSubApi   = "WebSubApi"
+	LLMProvider = "LlmProvider"
+	LLMProxy    = "LlmProxy"
+)
+
 // API Type Constants
 const (
 	APITypeHTTP       = "HTTP"

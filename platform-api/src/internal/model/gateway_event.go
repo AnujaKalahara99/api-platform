@@ -30,7 +30,7 @@ type GatewayEvent struct {
 
 	// Payload contains event-specific data as raw JSON.
 	// The structure depends on the event type:
-	//   - "api.deployed": APIDeploymentEvent
+	//   - "api.deployed": DeploymentEvent
 	//   - "api.undeployed": APIUndeploymentEvent
 	//   - "gateway.config.updated": GatewayConfigEvent
 	Payload json.RawMessage `json:"payload"`
@@ -45,9 +45,9 @@ type GatewayEvent struct {
 	CorrelationID string `json:"correlationId"`
 }
 
-// APIDeploymentEvent contains payload data for "api.deployed" event type.
+// DeploymentEvent contains payload data for "api.deployed" event type.
 // This event is sent when an API is successfully deployed to a gateway.
-type APIDeploymentEvent struct {
+type DeploymentEvent struct {
 	// ApiId identifies the deployed API
 	ApiId string `json:"apiId"`
 

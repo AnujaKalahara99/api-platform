@@ -41,11 +41,11 @@ type GatewayResponse struct {
 	Description       string                 `json:"description,omitempty"`
 	Properties        map[string]interface{} `json:"properties,omitempty"`
 	Vhost             string                 `json:"vhost"`
-	IsCritical        bool      `json:"isCritical"`
-	FunctionalityType string    `json:"functionalityType"`
-	IsActive          bool      `json:"isActive"`
-	CreatedAt         time.Time `json:"createdAt"`
-	UpdatedAt         time.Time `json:"updatedAt"`
+	IsCritical        bool                   `json:"isCritical"`
+	FunctionalityType string                 `json:"functionalityType"`
+	IsActive          bool                   `json:"isActive"`
+	CreatedAt         time.Time              `json:"createdAt"`
+	UpdatedAt         time.Time              `json:"updatedAt"`
 }
 
 // GatewayListResponse represents a paginated list of gateways (constitution-compliant)
@@ -99,8 +99,8 @@ type AddGatewayToAPIRequest struct {
 	GatewayID string `json:"gatewayId" binding:"required"`
 }
 
-// APIDeploymentDetails represents deployment details for an API on a gateway
-type APIDeploymentDetails struct {
+// DeploymentDetails represents deployment details for an API on a gateway
+type DeploymentDetails struct {
 	DeploymentID string    `json:"deploymentId"`
 	DeployedAt   time.Time `json:"deployedAt"`
 }
@@ -108,10 +108,10 @@ type APIDeploymentDetails struct {
 // APIGatewayResponse represents a gateway with API association and deployment details
 // This extends GatewayResponse with additional association and deployment fields
 type APIGatewayResponse struct {
-	GatewayResponse                       // Embedded gateway details
-	AssociatedAt    time.Time             `json:"associatedAt"`
-	IsDeployed      bool                  `json:"isDeployed"`
-	Deployment      *APIDeploymentDetails `json:"deployment,omitempty"` // Only present when isDeployed is true
+	GatewayResponse                    // Embedded gateway details
+	AssociatedAt    time.Time          `json:"associatedAt"`
+	IsDeployed      bool               `json:"isDeployed"`
+	Deployment      *DeploymentDetails `json:"deployment,omitempty"` // Only present when isDeployed is true
 }
 
 // APIGatewayListResponse represents a paginated list of gateways with API association and deployment details
@@ -125,8 +125,7 @@ type APIGatewayListResponse struct {
 type GatewayArtifact struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name,omitempty"`
-	Type      string    `json:"type"`              // "API", "MCP", "API_PRODUCT"
-	SubType   string    `json:"subType,omitempty"` // For APIs: "REST", "ASYNC", "GQL"
+	Kind      string    `json:"kind"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

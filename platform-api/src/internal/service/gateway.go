@@ -29,7 +29,6 @@ import (
 	"platform-api/src/internal/dto"
 	"platform-api/src/internal/model"
 	"platform-api/src/internal/repository"
-	"platform-api/src/internal/utils"
 	"regexp"
 	"strings"
 	"time"
@@ -312,8 +311,8 @@ func (s *GatewayService) DeleteGateway(gatewayID, orgID string) error {
 		return constants.ErrGatewayNotFound
 	}
 
-	// Check if there are any API deployments with this gateway
-	hasDeployments, err := s.gatewayRepo.HasGatewayAPIDeployments(gatewayID, orgID)
+	// Check if there are any associations with this gateway
+	hasDeployments, err := s.gatewayRepo.HasGatewayDeployments(gatewayID, orgID)
 	if err != nil {
 		return fmt.Errorf("failed to check gateway deployments: %w", err)
 	}
@@ -322,7 +321,7 @@ func (s *GatewayService) DeleteGateway(gatewayID, orgID string) error {
 		return constants.ErrGatewayHasDeployments
 	}
 
-	// Delete gateway (CASCADE will remove tokens automatically, api_associations cleanup handled by repository)
+	// Delete gateway (CASCADE will remove tokens automatically, association_mappings cleanup handled by repository)
 	err = s.gatewayRepo.Delete(gatewayID, orgID)
 	if err != nil {
 		return err
@@ -506,6 +505,8 @@ func (s *GatewayService) GetGatewayArtifacts(gatewayID, orgID, artifactType stri
 	}
 
 	// Get all APIs deployed to this gateway
+	// TODO(RakhithaRR): In future, when MCP and API_PRODUCT are supported, this method should be updated to query those artifacts as well,
+	//  and apply type filtering at the database level for efficiency
 	apis, err := s.apiRepo.GetDeployedAPIsByGatewayUUID(gatewayID, orgID)
 	if err != nil {
 		return nil, err
@@ -519,15 +520,10 @@ func (s *GatewayService) GetGatewayArtifacts(gatewayID, orgID, artifactType stri
 			continue
 		}
 
-		// Determine API subtype based on the type field using APIUtil
-		apiUtil := &utils.APIUtil{}
-		subType := apiUtil.GetAPISubType(api.Type)
-
 		artifact := dto.GatewayArtifact{
 			ID:        api.Handle,
 			Name:      api.Name,
-			Type:      "API",
-			SubType:   subType,
+			Kind:      constants.RestApi,
 			CreatedAt: api.CreatedAt,
 			UpdatedAt: api.UpdatedAt,
 		}

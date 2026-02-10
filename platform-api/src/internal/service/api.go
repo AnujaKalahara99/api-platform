@@ -44,8 +44,6 @@ type APIService struct {
 	gatewayRepo          repository.GatewayRepository
 	devPortalRepo        repository.DevPortalRepository
 	publicationRepo      repository.APIPublicationRepository
-	backendServiceRepo   repository.BackendServiceRepository
-	upstreamService      *UpstreamService
 	gatewayEventsService *GatewayEventsService
 	devPortalService     *DevPortalService
 	apiUtil              *utils.APIUtil
@@ -55,7 +53,6 @@ type APIService struct {
 func NewAPIService(apiRepo repository.APIRepository, projectRepo repository.ProjectRepository,
 	orgRepo repository.OrganizationRepository, gatewayRepo repository.GatewayRepository,
 	devPortalRepo repository.DevPortalRepository, publicationRepo repository.APIPublicationRepository,
-	backendServiceRepo repository.BackendServiceRepository, upstreamSvc *UpstreamService,
 	gatewayEventsService *GatewayEventsService, devPortalService *DevPortalService, apiUtil *utils.APIUtil) *APIService {
 	return &APIService{
 		apiRepo:              apiRepo,
@@ -64,8 +61,6 @@ func NewAPIService(apiRepo repository.APIRepository, projectRepo repository.Proj
 		gatewayRepo:          gatewayRepo,
 		devPortalRepo:        devPortalRepo,
 		publicationRepo:      publicationRepo,
-		backendServiceRepo:   backendServiceRepo,
-		upstreamService:      upstreamSvc,
 		gatewayEventsService: gatewayEventsService,
 		devPortalService:     devPortalService,
 		apiUtil:              apiUtil,
@@ -108,11 +103,11 @@ func (s *APIService) CreateAPI(req *CreateAPIRequest, orgUUID string) (*dto.API,
 	}
 
 	// Set default values if not provided
-	if req.Provider == "" {
-		req.Provider = "admin" // Default provider
+	if req.CreatedBy == "" {
+		req.CreatedBy = "admin" // Default provider
 	}
-	if req.Type == "" {
-		req.Type = "HTTP"
+	if req.Kind == "" {
+		req.Kind = constants.RestApi
 	}
 	if len(req.Transport) == 0 {
 		req.Transport = []string{"http", "https"}
@@ -120,12 +115,12 @@ func (s *APIService) CreateAPI(req *CreateAPIRequest, orgUUID string) (*dto.API,
 	if req.LifeCycleStatus == "" {
 		req.LifeCycleStatus = "CREATED"
 	}
-	if len(req.Operations) == 0 && constants.APITypeHTTP == req.Type {
+	if len(req.Operations) == 0 && constants.RestApi == req.Kind {
 		// generate default get, post, patch and delete operations with path /*
 		defaultOperations := s.generateDefaultOperations()
 		req.Operations = defaultOperations
-	} else if constants.APITypeWebSub == req.Type && len(req.Channels) == 0 {
-		defaultChannels := s.generateDefaultChannels(req.Type)
+	} else if constants.APITypeWebSub == req.Kind && len(req.Channels) == 0 {
+		defaultChannels := s.generateDefaultChannels(req.Kind)
 		req.Channels = defaultChannels
 	}
 
@@ -133,39 +128,21 @@ func (s *APIService) CreateAPI(req *CreateAPIRequest, orgUUID string) (*dto.API,
 
 	// Create API DTO - ID field holds the handle (user-facing identifier)
 	api := &dto.API{
-		ID:               handle,
-		Name:             req.Name,
-		Description:      req.Description,
-		Context:          req.Context,
-		Version:          req.Version,
-		Provider:         req.Provider,
-		ProjectID:        req.ProjectID,
-		OrganizationID:   orgUUID,
-		LifeCycleStatus:  req.LifeCycleStatus,
-		HasThumbnail:     req.HasThumbnail,
-		IsDefaultVersion: req.IsDefaultVersion,
-		Type:             req.Type,
-		Transport:        req.Transport,
-		MTLS:             req.MTLS,
-		Security:         req.Security,
-		CORS:             req.CORS,
-		BackendServices:  req.BackendServices,
-		APIRateLimiting:  req.APIRateLimiting,
-		Operations:       req.Operations,
-		Channels:         req.Channels,
+		ID:              handle,
+		Name:            req.Name,
+		Description:     req.Description,
+		Context:         req.Context,
+		Version:         req.Version,
+		CreatedBy:       req.CreatedBy,
+		ProjectID:       req.ProjectID,
+		OrganizationID:  orgUUID,
+		LifeCycleStatus: req.LifeCycleStatus,
+		Kind:            constants.RestApi,
+		Transport:       req.Transport,
+		Operations:      req.Operations,
+		Channels:        req.Channels,
+		Upstream:        req.Upstream,
 	}
-
-	// Process backend services: check if they exist, create or update them
-	var backendServiceIdList []string
-	for _, backendService := range req.BackendServices {
-		backendServiceId, err := s.upstreamService.UpsertBackendService(&backendService, orgUUID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to process backend service '%s': %w", backendService.Name, err)
-		}
-		backendServiceIdList = append(backendServiceIdList, backendServiceId)
-	}
-
-	fmt.Println("Backend Services Created")
 
 	apiModel := s.apiUtil.DTOToModel(api)
 	fmt.Println("Got API Model")
@@ -181,21 +158,6 @@ func (s *APIService) CreateAPI(req *CreateAPIRequest, orgUUID string) (*dto.API,
 
 	api.CreatedAt = apiModel.CreatedAt
 	api.UpdatedAt = apiModel.UpdatedAt
-
-	// Associate backend services with the API (use internal UUID)
-	for i, backendServiceUUID := range backendServiceIdList {
-		isDefault := i == 0 // First backend service is default
-		if len(req.BackendServices) > 0 && i < len(req.BackendServices) {
-			// Check if isDefault was explicitly set in the request
-			isDefault = req.BackendServices[i].IsDefault
-		}
-
-		if err := s.upstreamService.AssociateBackendServiceWithAPI(apiUUID, backendServiceUUID, isDefault); err != nil {
-			return nil, fmt.Errorf("failed to associate backend service with API: %w", err)
-		}
-	}
-
-	fmt.Println("Associated Backends")
 
 	// Automatically create DevPortal association for default DevPortal (use internal UUID)
 	if err := s.createDefaultDevPortalAssociation(apiUUID, orgUUID); err != nil {
@@ -327,12 +289,6 @@ func (s *APIService) UpdateAPI(apiUUID string, req *UpdateAPIRequest, orgUUID st
 	updatedAPIModel.ID = apiUUID // Ensure UUID remains unchanged
 	if err := s.apiRepo.UpdateAPI(updatedAPIModel); err != nil {
 		return nil, err
-	}
-
-	if req.BackendServices != nil {
-		if err := s.updateAPIBackendServices(apiUUID, req.BackendServices, orgUUID); err != nil {
-			return nil, err
-		}
 	}
 
 	return existingAPI, nil
@@ -481,7 +437,7 @@ func (s *APIService) AddGatewaysToAPI(apiUUID string, gatewayIds []string, orgUU
 		} else {
 			// Create new association
 			association := &model.APIAssociation{
-				ApiID:           apiUUID,
+				ArtifactID:      apiUUID,
 				OrganizationID:  orgUUID,
 				ResourceID:      gateway.ID,
 				AssociationType: constants.AssociationTypeGateway,
@@ -576,7 +532,7 @@ func (s *APIService) createDefaultDevPortalAssociation(apiId, orgId string) erro
 
 	// Create API-DevPortal association
 	association := &model.APIAssociation{
-		ApiID:           apiId,
+		ArtifactID:      apiId,
 		OrganizationID:  orgId,
 		ResourceID:      defaultDevPortal.UUID,
 		AssociationType: constants.AssociationTypeDevPortal,
@@ -643,13 +599,13 @@ func (s *APIService) validateCreateAPIRequest(req *CreateAPIRequest, orgUUID str
 	}
 
 	// Validate API type if provided
-	if req.Type != "" && !constants.ValidAPITypes[req.Type] {
+	if req.Kind != "" && !strings.EqualFold(req.Kind, constants.RestApi) {
 		return constants.ErrInvalidAPIType
 	}
 
 	// Type-specific validations
 	// Ensure that WebSub APIs do not have operations and HTTP APIs do not have channels
-	switch req.Type {
+	switch req.Kind {
 	case constants.APITypeWebSub:
 		// For WebSub APIs, ensure that at least one channel is defined
 		if req.Operations != nil || len(req.Operations) > 0 {
@@ -690,38 +646,14 @@ func (s *APIService) applyAPIUpdates(existingAPIModel *model.API, req *UpdateAPI
 	if req.Description != nil {
 		existingAPI.Description = *req.Description
 	}
-	if req.Provider != nil {
-		existingAPI.Provider = *req.Provider
+	if req.CreatedBy != nil {
+		existingAPI.CreatedBy = *req.CreatedBy
 	}
 	if req.LifeCycleStatus != nil {
 		existingAPI.LifeCycleStatus = *req.LifeCycleStatus
 	}
-	if req.HasThumbnail != nil {
-		existingAPI.HasThumbnail = *req.HasThumbnail
-	}
-	if req.IsDefaultVersion != nil {
-		existingAPI.IsDefaultVersion = *req.IsDefaultVersion
-	}
-	if req.Type != nil {
-		existingAPI.Type = *req.Type
-	}
 	if req.Transport != nil {
 		existingAPI.Transport = *req.Transport
-	}
-	if req.MTLS != nil {
-		existingAPI.MTLS = req.MTLS
-	}
-	if req.Security != nil {
-		existingAPI.Security = req.Security
-	}
-	if req.CORS != nil {
-		existingAPI.CORS = req.CORS
-	}
-	if req.BackendServices != nil {
-		existingAPI.BackendServices = *req.BackendServices
-	}
-	if req.APIRateLimiting != nil {
-		existingAPI.APIRateLimiting = req.APIRateLimiting
 	}
 	if req.Operations != nil {
 		existingAPI.Operations = *req.Operations
@@ -732,47 +664,11 @@ func (s *APIService) applyAPIUpdates(existingAPIModel *model.API, req *UpdateAPI
 	if req.Policies != nil {
 		existingAPI.Policies = *req.Policies
 	}
+	if req.Upstream != nil {
+		existingAPI.Upstream = req.Upstream
+	}
 
 	return existingAPI, nil
-}
-
-// updateAPIBackendServices handles backend service updates for an API
-func (s *APIService) updateAPIBackendServices(apiUUID string, backendServices *[]dto.BackendService, orgId string) error {
-	// Process backend services: check if they exist, create or update them
-	var backendServiceUUIDs []string
-	for _, backendService := range *backendServices {
-		backendServiceUUID, err := s.upstreamService.UpsertBackendService(&backendService, orgId)
-		if err != nil {
-			return fmt.Errorf("failed to process backend service '%s': %w", backendService.Name, err)
-		}
-		backendServiceUUIDs = append(backendServiceUUIDs, backendServiceUUID)
-	}
-
-	// Remove existing associations
-	existingBackendServices, err := s.upstreamService.GetBackendServicesByAPIID(apiUUID)
-	if err != nil {
-		return fmt.Errorf("failed to get existing backend services: %w", err)
-	}
-
-	for _, existingService := range existingBackendServices {
-		if err := s.upstreamService.DisassociateBackendServiceFromAPI(apiUUID, existingService.ID); err != nil {
-			return fmt.Errorf("failed to remove existing backend service association: %w", err)
-		}
-	}
-
-	// Add new associations
-	for i, backendServiceUUID := range backendServiceUUIDs {
-		isDefault := i == 0
-		if len(*backendServices) > 0 && i < len(*backendServices) {
-			isDefault = (*backendServices)[i].IsDefault
-		}
-
-		if err := s.upstreamService.AssociateBackendServiceWithAPI(apiUUID, backendServiceUUID, isDefault); err != nil {
-			return fmt.Errorf("failed to associate backend service with API: %w", err)
-		}
-	}
-
-	return nil
 }
 
 // validateUpdateAPIRequest checks the validity of the update API request
@@ -794,7 +690,7 @@ func (s *APIService) validateUpdateAPIRequest(existingAPIModel *model.API, req *
 	}
 
 	// Validate API type if provided
-	if req.Type != nil && !constants.ValidAPITypes[*req.Type] {
+	if req.Kind != nil && !strings.EqualFold(*req.Kind, constants.RestApi) {
 		return constants.ErrInvalidAPIType
 	}
 
@@ -841,45 +737,33 @@ func (s *APIService) isValidVHost(vhost string) bool {
 
 // CreateAPIRequest represents the request to create a new API
 type CreateAPIRequest struct {
-	ID               string                  `json:"id,omitempty"`
-	Name             string                  `json:"name"`
-	Description      string                  `json:"description,omitempty"`
-	Context          string                  `json:"context"`
-	Version          string                  `json:"version"`
-	Provider         string                  `json:"provider,omitempty"`
-	ProjectID        string                  `json:"projectId"`
-	LifeCycleStatus  string                  `json:"lifeCycleStatus,omitempty"`
-	HasThumbnail     bool                    `json:"hasThumbnail,omitempty"`
-	IsDefaultVersion bool                    `json:"isDefaultVersion,omitempty"`
-	Type             string                  `json:"type,omitempty"`
-	Transport        []string                `json:"transport,omitempty"`
-	MTLS             *dto.MTLSConfig         `json:"mtls,omitempty"`
-	Security         *dto.SecurityConfig     `json:"security,omitempty"`
-	CORS             *dto.CORSConfig         `json:"cors,omitempty"`
-	BackendServices  []dto.BackendService    `json:"backend-services,omitempty"`
-	APIRateLimiting  *dto.RateLimitingConfig `json:"api-rate-limiting,omitempty"`
-	Channels         []dto.Channel           `json:"channels,omitempty"`
-	Operations       []dto.Operation         `json:"operations,omitempty"`
+	ID              string             `json:"id,omitempty"`
+	Name            string             `json:"name"`
+	Description     string             `json:"description,omitempty"`
+	Context         string             `json:"context"`
+	Version         string             `json:"version"`
+	CreatedBy       string             `json:"createdBy,omitempty"`
+	ProjectID       string             `json:"projectId"`
+	LifeCycleStatus string             `json:"lifeCycleStatus,omitempty"`
+	Kind            string             `json:"kind,omitempty"`
+	Transport       []string           `json:"transport,omitempty"`
+	Channels        []dto.Channel      `json:"channels,omitempty"`
+	Operations      []dto.Operation    `json:"operations,omitempty"`
+	Upstream        *dto.UpstreamConfig `json:"upstream,omitempty"`
 }
 
 // UpdateAPIRequest represents the request to update an API
 type UpdateAPIRequest struct {
-	Name             *string                 `json:"name,omitempty"`
-	Description      *string                 `json:"description,omitempty"`
-	Provider         *string                 `json:"provider,omitempty"`
-	LifeCycleStatus  *string                 `json:"lifeCycleStatus,omitempty"`
-	HasThumbnail     *bool                   `json:"hasThumbnail,omitempty"`
-	IsDefaultVersion *bool                   `json:"isDefaultVersion,omitempty"`
-	Type             *string                 `json:"type,omitempty"`
-	Transport        *[]string               `json:"transport,omitempty"`
-	MTLS             *dto.MTLSConfig         `json:"mtls,omitempty"`
-	Security         *dto.SecurityConfig     `json:"security,omitempty"`
-	CORS             *dto.CORSConfig         `json:"cors,omitempty"`
-	BackendServices  *[]dto.BackendService   `json:"backend-services,omitempty"`
-	APIRateLimiting  *dto.RateLimitingConfig `json:"api-rate-limiting,omitempty"`
-	Operations       *[]dto.Operation        `json:"operations,omitempty"`
-	Channels         *[]dto.Channel          `json:"channels,omitempty"`
-	Policies         *[]dto.Policy           `json:"policies,omitempty"`
+	Name            *string             `json:"name,omitempty"`
+	Description     *string             `json:"description,omitempty"`
+	CreatedBy       *string             `json:"createdBy,omitempty"`
+	LifeCycleStatus *string             `json:"lifeCycleStatus,omitempty"`
+	Kind            *string             `json:"kind,omitempty"`
+	Transport       *[]string           `json:"transport,omitempty"`
+	Operations      *[]dto.Operation    `json:"operations,omitempty"`
+	Channels        *[]dto.Channel      `json:"channels,omitempty"`
+	Policies        *[]dto.Policy       `json:"policies,omitempty"`
+	Upstream        *dto.UpstreamConfig `json:"upstream,omitempty"`
 }
 
 // generateDefaultOperations creates default CRUD operations for an API
@@ -889,12 +773,8 @@ func (s *APIService) generateDefaultOperations() []dto.Operation {
 			Name:        "Get Resource",
 			Description: "Retrieve all resources",
 			Request: &dto.OperationRequest{
-				Method: "GET",
-				Path:   "/*",
-				Authentication: &dto.AuthenticationConfig{
-					Required: false,
-					Scopes:   []string{},
-				},
+				Method:   "GET",
+				Path:     "/*",
 				Policies: []dto.Policy{},
 			},
 		},
@@ -902,12 +782,8 @@ func (s *APIService) generateDefaultOperations() []dto.Operation {
 			Name:        "POST Resource",
 			Description: "Create a new resource",
 			Request: &dto.OperationRequest{
-				Method: "POST",
-				Path:   "/*",
-				Authentication: &dto.AuthenticationConfig{
-					Required: false,
-					Scopes:   []string{},
-				},
+				Method:   "POST",
+				Path:     "/*",
 				Policies: []dto.Policy{},
 			},
 		},
@@ -915,12 +791,8 @@ func (s *APIService) generateDefaultOperations() []dto.Operation {
 			Name:        "Update Resource",
 			Description: "Update an existing resource",
 			Request: &dto.OperationRequest{
-				Method: "PATCH",
-				Path:   "/*",
-				Authentication: &dto.AuthenticationConfig{
-					Required: false,
-					Scopes:   []string{},
-				},
+				Method:   "PATCH",
+				Path:     "/*",
 				Policies: []dto.Policy{},
 			},
 		},
@@ -928,12 +800,8 @@ func (s *APIService) generateDefaultOperations() []dto.Operation {
 			Name:        "Delete Resource",
 			Description: "Delete an existing resource",
 			Request: &dto.OperationRequest{
-				Method: "DELETE",
-				Path:   "/*",
-				Authentication: &dto.AuthenticationConfig{
-					Required: false,
-					Scopes:   []string{},
-				},
+				Method:   "DELETE",
+				Path:     "/*",
 				Policies: []dto.Policy{},
 			},
 		},
@@ -948,12 +816,8 @@ func (s *APIService) generateDefaultChannels(asyncAPIType string) []dto.Channel 
 				Name:        "Default",
 				Description: "Default SUB Channel",
 				Request: &dto.ChannelRequest{
-					Method: "SUB",
-					Name:   "/_default",
-					Authentication: &dto.AuthenticationConfig{
-						Required: false,
-						Scopes:   []string{},
-					},
+					Method:   "SUB",
+					Name:     "/_default",
 					Policies: []dto.Policy{},
 				},
 			},
@@ -964,12 +828,8 @@ func (s *APIService) generateDefaultChannels(asyncAPIType string) []dto.Channel 
 			Name:        "Default",
 			Description: "Default SUB Channel",
 			Request: &dto.ChannelRequest{
-				Method: "SUB",
-				Name:   "/_default",
-				Authentication: &dto.AuthenticationConfig{
-					Required: false,
-					Scopes:   []string{},
-				},
+				Method:   "SUB",
+				Name:     "/_default",
 				Policies: []dto.Policy{},
 			},
 		},
@@ -977,12 +837,8 @@ func (s *APIService) generateDefaultChannels(asyncAPIType string) []dto.Channel 
 			Name:        "Default PUB Channel",
 			Description: "Default PUB Channel",
 			Request: &dto.ChannelRequest{
-				Method: "PUB",
-				Name:   "/_default",
-				Authentication: &dto.AuthenticationConfig{
-					Required: false,
-					Scopes:   []string{},
-				},
+				Method:   "PUB",
+				Name:     "/_default",
 				Policies: []dto.Policy{},
 			},
 		},
@@ -1026,24 +882,17 @@ func (s *APIService) ImportAPIProject(req *dto.ImportAPIProjectRequest, orgUUID 
 
 	// 7. Create API using the existing CreateAPI flow
 	createReq := &CreateAPIRequest{
-		ID:               apiData.ID,
-		Name:             apiData.Name,
-		Description:      apiData.Description,
-		Context:          apiData.Context,
-		Version:          apiData.Version,
-		Provider:         apiData.Provider,
-		ProjectID:        apiData.ProjectID,
-		LifeCycleStatus:  apiData.LifeCycleStatus,
-		HasThumbnail:     apiData.HasThumbnail,
-		IsDefaultVersion: apiData.IsDefaultVersion,
-		Type:             apiData.Type,
-		Transport:        apiData.Transport,
-		MTLS:             apiData.MTLS,
-		Security:         apiData.Security,
-		CORS:             apiData.CORS,
-		BackendServices:  apiData.BackendServices,
-		APIRateLimiting:  apiData.APIRateLimiting,
-		Operations:       apiData.Operations,
+		ID:              apiData.ID,
+		Name:            apiData.Name,
+		Kind:            apiData.Kind,
+		Description:     apiData.Description,
+		Context:         apiData.Context,
+		Version:         apiData.Version,
+		CreatedBy:       apiData.CreatedBy,
+		ProjectID:       apiData.ProjectID,
+		LifeCycleStatus: apiData.LifeCycleStatus,
+		Transport:       apiData.Transport,
+		Operations:      apiData.Operations,
 	}
 
 	return s.CreateAPI(createReq, orgUUID)
@@ -1069,8 +918,8 @@ func (s *APIService) mergeAPIData(artifact *dto.APIYAMLData, userAPIData *dto.AP
 	if userAPIData.Version != "" {
 		apiDTO.Version = userAPIData.Version
 	}
-	if userAPIData.Provider != "" {
-		apiDTO.Provider = userAPIData.Provider
+	if userAPIData.CreatedBy != "" {
+		apiDTO.CreatedBy = userAPIData.CreatedBy
 	}
 	if userAPIData.ProjectID != "" {
 		apiDTO.ProjectID = userAPIData.ProjectID
@@ -1078,19 +927,9 @@ func (s *APIService) mergeAPIData(artifact *dto.APIYAMLData, userAPIData *dto.AP
 	if userAPIData.LifeCycleStatus != "" {
 		apiDTO.LifeCycleStatus = userAPIData.LifeCycleStatus
 	}
-	if userAPIData.Type != "" {
-		apiDTO.Type = userAPIData.Type
-	}
 	if len(userAPIData.Transport) > 0 {
 		apiDTO.Transport = userAPIData.Transport
 	}
-	if userAPIData.BackendServices != nil && len(userAPIData.BackendServices) > 0 {
-		apiDTO.BackendServices = userAPIData.BackendServices
-	}
-
-	// Handle boolean fields
-	apiDTO.HasThumbnail = userAPIData.HasThumbnail
-	apiDTO.IsDefaultVersion = userAPIData.IsDefaultVersion
 
 	return apiDTO
 }
@@ -1260,7 +1099,7 @@ func (s *APIService) convertToAPIGatewayResponse(gwd *model.APIGatewayWithDetail
 
 	// Add deployment details if deployed
 	if gwd.IsDeployed && gwd.DeploymentID != nil && gwd.DeployedAt != nil {
-		apiGatewayResponse.Deployment = &dto.APIDeploymentDetails{
+		apiGatewayResponse.Deployment = &dto.DeploymentDetails{
 			DeploymentID: *gwd.DeploymentID,
 			DeployedAt:   *gwd.DeployedAt,
 		}
@@ -1455,16 +1294,10 @@ func (s *APIService) ImportFromOpenAPI(req *dto.ImportOpenAPIRequest, orgId stri
 		Description:     mergedAPI.Description,
 		Context:         mergedAPI.Context,
 		Version:         mergedAPI.Version,
-		Provider:        mergedAPI.Provider,
+		CreatedBy:       mergedAPI.CreatedBy,
 		ProjectID:       mergedAPI.ProjectID,
 		LifeCycleStatus: mergedAPI.LifeCycleStatus,
-		Type:            mergedAPI.Type,
 		Transport:       mergedAPI.Transport,
-		MTLS:            mergedAPI.MTLS,
-		Security:        mergedAPI.Security,
-		CORS:            mergedAPI.CORS,
-		BackendServices: mergedAPI.BackendServices,
-		APIRateLimiting: mergedAPI.APIRateLimiting,
 		Operations:      mergedAPI.Operations,
 	}
 

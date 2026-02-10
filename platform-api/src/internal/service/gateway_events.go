@@ -55,7 +55,7 @@ func NewGatewayEventsService(manager *ws.Manager) *GatewayEventsService {
 // - Payload size validation
 // - Delivery statistics tracking
 // - Failure logging
-func (s *GatewayEventsService) BroadcastDeploymentEvent(gatewayID string, deployment *model.APIDeploymentEvent) error {
+func (s *GatewayEventsService) BroadcastDeploymentEvent(gatewayID string, deployment *model.DeploymentEvent) error {
 	// Create correlation ID for tracing
 	correlationID := uuid.New().String()
 

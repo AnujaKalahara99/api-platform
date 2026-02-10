@@ -501,7 +501,7 @@ func (s *DevPortalService) prepareAPIMetadata(api *dto.API, req *dto.PublishToDe
 		APIHandle:      sanitizeAPIHandle(api.Context),
 		APIVersion:     api.Version,
 		APIType:        devportal_client.APIType("REST"),
-		Provider:       api.Provider,
+		Provider:       api.CreatedBy,
 		APIDescription: api.Description,
 		APIStatus:      "PUBLISHED",
 		Visibility:     devportal_client.APIVisibility("PUBLIC"),
@@ -673,7 +673,7 @@ func (s *DevPortalService) savePublicationWithCompensation(
 
 	// Create API-DevPortal association after successful publication
 	association := &model.APIAssociation{
-		ApiID:           apiID,
+		ArtifactID:      apiID,
 		OrganizationID:  orgID,
 		ResourceID:      devPortal.UUID,
 		AssociationType: constants.AssociationTypeDevPortal,
@@ -772,7 +772,7 @@ func (s *DevPortalService) UnpublishAPIFromDevPortal(devPortalUUID, orgID, apiID
 	}
 
 	// Delete publication record after successful unpublish
-	// NOTE: We intentionally keep the api_associations record to maintain the association history
+	// NOTE: We intentionally keep the association_mappings record to maintain the association history
 	if err := s.publicationRepo.Delete(apiID, devPortalUUID, orgID); err != nil {
 		// Log error but don't fail the unpublish operation if record doesn't exist
 		if !errors.Is(err, constants.ErrAPIPublicationNotFound) {
