@@ -121,8 +121,9 @@ paths:
     delete:
       summary: Delete gateway
       description: |
-        Deletes a gateway and all associated tokens. Access is validated against the organization 
-        in the JWT token.
+        Deletes a gateway and all associated data including tokens, deployments, and deployment status.
+        All deletions are performed via database CASCADE constraints. Access is validated against the 
+        organization in the JWT token.
       operationId: deleteGateway
       tags:
         - Gateways

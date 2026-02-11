@@ -311,7 +311,7 @@ func (s *GatewayService) DeleteGateway(gatewayID, orgID string) error {
 		return constants.ErrGatewayNotFound
 	}
 
-	// Delete gateway (CASCADE will remove tokens, deployements automatically, association_mappings cleanup handled by repository)
+	// Delete gateway (FK CASCADE will automatically remove tokens and deployments; association_mappings cleanup is handled by the repository)
 	err = s.gatewayRepo.Delete(gatewayID, orgID)
 	if err != nil {
 		return err

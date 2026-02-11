@@ -23,11 +23,12 @@ import (
 	"platform-api/src/internal/constants"
 	"strings"
 
-	"github.com/gin-gonic/gin"
 	"platform-api/src/internal/dto"
 	"platform-api/src/internal/middleware"
 	"platform-api/src/internal/service"
 	"platform-api/src/internal/utils"
+
+	"github.com/gin-gonic/gin"
 )
 
 // GatewayHandler handles HTTP requests for gateway operations
@@ -261,12 +262,6 @@ func (h *GatewayHandler) DeleteGateway(c *gin.Context) {
 			utils.LogError("Gateway has associated APIs during deletion", err)
 			c.JSON(http.StatusConflict, utils.NewErrorResponse(409, "Conflict",
 				"The gateway has associated APIs. Please remove all API associations before deleting the gateway"))
-			return
-		}
-		if errors.Is(err, constants.ErrGatewayHasDeployments) {
-			utils.LogError("Gateway has active API deployments during deletion", err)
-			c.JSON(http.StatusConflict, utils.NewErrorResponse(409, "Conflict",
-				"Cannot delete gateway: it has active API deployments. Please undeploy all APIs before deleting the gateway"))
 			return
 		}
 

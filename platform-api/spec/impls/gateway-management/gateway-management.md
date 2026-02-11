@@ -107,14 +107,18 @@ The organization ID is automatically extracted from the JWT token and used for a
 
 **Endpoint**: `DELETE /api/v1/gateways/{gatewayId}`
 
-**Status**: ✅ User Story 1 Complete | ⏳ User Story 2 Pending
+**Status**: ✅ Complete
 
 **Behavior**:
 1. Validates JWT token and extracts organization claim
 2. Validates UUID format for gateway ID
 3. Verifies gateway exists and belongs to user's organization
 4. Executes transaction-wrapped DELETE with organization isolation
-5. Automatic CASCADE deletion of all gateway tokens
+5. Automatic CASCADE deletion of:
+   - All gateway tokens
+   - All deployments
+   - All deployment status entries
+   - All association mappings (via explicit delete and artifact cascade)
 6. Returns 204 No Content on success
 7. Idempotent operation (second delete returns 404)
 
@@ -123,10 +127,10 @@ The organization ID is automatically extracted from the JWT token and used for a
 - Same 404 response for "not found" and "wrong organization" (prevents enumeration)
 - All operations scoped to JWT token's organization claim
 
-**Pending Features** (User Story 2):
-- Pre-deletion validation for active API deployments
-- Pre-deletion validation for active WebSocket connections
-- 409 Conflict response when gateway has active dependencies
+**Database CASCADE Behavior**:
+- Gateway deletion cascades automatically via foreign key constraints
+- No pre-deletion validation required - database ensures referential integrity
+- Association mappings are explicitly deleted before gateway deletion
 
 ## Database
 
@@ -138,7 +142,8 @@ The organization ID is automatically extracted from the JWT token and used for a
 
 **Key Constraints**:
 - Composite unique constraint on `(organization_uuid, name)` prevents duplicate gateway names within organization
-- CASCADE delete: Deleting organization removes all gateways; deleting gateway removes all tokens
+- CASCADE delete: Deleting organization removes all gateways and related data
+- CASCADE delete: Deleting gateway removes all tokens, deployments, and deployment status
 - Token status validation: 'active' or 'revoked'
 
 ## Token Security
