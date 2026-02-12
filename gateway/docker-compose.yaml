@@ -60,11 +60,18 @@ services:
       - "8083:8083"
       - "9002:9002"   # Policy Engine admin
       - "9003:9003"   # Policy Engine metrics
+      - "8066:8066"   # Mediation Engine WebSocket
+      - "8067:8067"   # Mediation Engine SSE
+      - "8068:8068"   # Mediation Engine HTTP POST
+      - "8069:8069"   # Mediation Engine HTTP GET
     environment:
       - GATEWAY_CONTROLLER_HOST=gateway-controller
       - LOG_LEVEL=info
+      - MEDIATION_ENABLED=${MEDIATION_ENABLED:-false}
+      - MEDIATION_CONFIG_PATH=/etc/mediation/config.yaml
     volumes:
       - ./configs/config.toml:/etc/policy-engine/config.toml:ro
+      - ./gateway-runtime/mediation-engine/config.yaml:/etc/mediation/config.yaml:ro
     networks:
       - gateway-network
 

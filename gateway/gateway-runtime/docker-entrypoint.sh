@@ -24,11 +24,12 @@
 # Process-specific args can be passed using prefixed flags:
 #   --rtr.<flag> <value>   → forwarded to Router (Envoy)
 #   --pol.<flag> <value>   → forwarded to Policy Engine
+#   --med.<flag> <value>   → forwarded to Mediation Engine
 #
 # Examples:
 #   docker run gateway-runtime --rtr.component-log-level upstream:debug --pol.log-format text
 #   In Kubernetes:
-#     args: ["--rtr.concurrency", "4", "--pol.log-format", "text"]
+#     args: ["--rtr.concurrency", "4", "--pol.log-format", "text", "--med.config", "/etc/mediation/config.yaml"]
 
 set -e
 
@@ -40,9 +41,10 @@ log() {
 # Parse process-specific args from command line.
 # Uses dot (.) as the prefix separator (e.g. --rtr.flag, --pol.flag) because no
 # standard CLI flag contains a dot, making prefix detection unambiguous.
-# --rtr.X → ROUTER_ARGS, --pol.X → PE_ARGS, unrecognized → warning
+# --rtr.X → ROUTER_ARGS, --pol.X → PE_ARGS, --med.X → ME_ARGS, unrecognized → warning
 ROUTER_ARGS=()
 PE_ARGS=()
+ME_ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -63,8 +65,16 @@ while [[ $# -gt 0 ]]; do
                 shift
             fi
             ;;
+        --med.*)
+            ME_ARGS+=("--${1#--med.}")
+            shift
+            if [[ $# -gt 0 && "$1" != --* ]]; then
+                ME_ARGS+=("$1")
+                shift
+            fi
+            ;;
         *)
-            log "ERROR: Unrecognized arg '$1' (use --rtr. or --pol. prefix)"
+            log "ERROR: Unrecognized arg '$1' (use --rtr., --pol., or --med. prefix)"
             exit 1
             ;;
     esac
@@ -79,6 +89,10 @@ export GATEWAY_CONTROLLER_HOST="${GATEWAY_CONTROLLER_HOST:-gateway-controller}"
 export ROUTER_XDS_PORT="${ROUTER_XDS_PORT:-18000}"
 export POLICY_ENGINE_XDS_PORT="${POLICY_ENGINE_XDS_PORT:-18001}"
 export LOG_LEVEL="${LOG_LEVEL:-info}"
+
+# Mediation Engine configuration
+export MEDIATION_CONFIG_PATH="${MEDIATION_CONFIG_PATH:-/etc/mediation/config.yaml}"
+export MEDIATION_ENABLED="${MEDIATION_ENABLED:-false}"
 
 # Derive Router (Envoy) xDS config — used by envsubst on config-override.yaml
 export XDS_SERVER_HOST="${GATEWAY_CONTROLLER_HOST}"
@@ -95,8 +109,12 @@ log "  Router xDS: ${GATEWAY_CONTROLLER_HOST}:${ROUTER_XDS_PORT}"
 log "  Policy Engine xDS: ${PE_XDS_SERVER}"
 log "  Log Level: ${LOG_LEVEL}"
 log "  Policy Engine Socket: ${POLICY_ENGINE_SOCKET}"
+if [ "${MEDIATION_ENABLED}" = "true" ]; then
+    log "  Mediation Engine: enabled (config: ${MEDIATION_CONFIG_PATH})"
+fi
 [[ ${#ROUTER_ARGS[@]} -gt 0 ]] && log "  Router extra args: ${ROUTER_ARGS[*]}"
 [[ ${#PE_ARGS[@]} -gt 0 ]] && log "  Policy Engine extra args: ${PE_ARGS[*]}"
+[[ ${#ME_ARGS[@]} -gt 0 ]] && log "  Mediation Engine extra args: ${ME_ARGS[*]}"
 
 # Cleanup stale socket from previous runs
 rm -f "${POLICY_ENGINE_SOCKET}"
@@ -107,12 +125,13 @@ CONFIG_OVERRIDE=$(envsubst < /etc/envoy/config-override.yaml)
 # Track child PIDs
 PE_PID=""
 ENVOY_PID=""
+ME_PID=""
 
 # Shutdown handler - gracefully terminate both processes
 shutdown() {
     log "Received shutdown signal, terminating processes..."
 
-    # Send SIGTERM to both processes
+    # Send SIGTERM to all processes
     if [ -n "$PE_PID" ] && kill -0 "$PE_PID" 2>/dev/null; then
         log "Stopping Policy Engine (PID $PE_PID)..."
         kill -TERM "$PE_PID" 2>/dev/null || true
@@ -121,6 +140,11 @@ shutdown() {
     if [ -n "$ENVOY_PID" ] && kill -0 "$ENVOY_PID" 2>/dev/null; then
         log "Stopping Envoy (PID $ENVOY_PID)..."
         kill -TERM "$ENVOY_PID" 2>/dev/null || true
+    fi
+
+    if [ -n "$ME_PID" ] && kill -0 "$ME_PID" 2>/dev/null; then
+        log "Stopping Mediation Engine (PID $ME_PID)..."
+        kill -TERM "$ME_PID" 2>/dev/null || true
     fi
 
     # Wait for processes to exit
@@ -180,28 +204,48 @@ log "Starting Envoy..."
 ENVOY_PID=$!
 log "Envoy started (PID $ENVOY_PID)"
 
-log "Gateway Runtime running - Policy Engine (PID $PE_PID), Envoy (PID $ENVOY_PID)"
+# Start Mediation Engine if enabled, with [med] log prefix
+if [ "${MEDIATION_ENABLED}" = "true" ]; then
+    log "Starting Mediation Engine..."
+    CONFIG_PATH="${MEDIATION_CONFIG_PATH}" /app/mediation-engine "${ME_ARGS[@]}" \
+        > >(while IFS= read -r line; do echo "[med] $line"; done) \
+        2> >(while IFS= read -r line; do echo "[med] $line" >&2; done) &
+    ME_PID=$!
+    log "Mediation Engine started (PID $ME_PID)"
+    log "Gateway Runtime running - Policy Engine (PID $PE_PID), Envoy (PID $ENVOY_PID), Mediation Engine (PID $ME_PID)"
+else
+    log "Gateway Runtime running - Policy Engine (PID $PE_PID), Envoy (PID $ENVOY_PID)"
+fi
 
-# Monitor both processes - exit if either dies
-wait -n "$PE_PID" "$ENVOY_PID"
+# Monitor processes - exit if any critical process dies
+if [ -n "$ME_PID" ]; then
+    wait -n "$PE_PID" "$ENVOY_PID" "$ME_PID"
+else
+    wait -n "$PE_PID" "$ENVOY_PID"
+fi
 EXIT_CODE=$?
 
-# Determine which process exited and clean up the other
+# Terminate all remaining processes
+terminate_if_running() {
+    local name=$1 pid=$2
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        log "Terminating $name (PID $pid)..."
+        kill -TERM "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    fi
+}
+
 if ! kill -0 "$PE_PID" 2>/dev/null; then
     log "Policy Engine exited with code $EXIT_CODE"
-    if kill -0 "$ENVOY_PID" 2>/dev/null; then
-        log "Terminating Envoy due to Policy Engine exit..."
-        kill -TERM "$ENVOY_PID" 2>/dev/null || true
-        wait "$ENVOY_PID" 2>/dev/null || true
-    fi
-else
+elif ! kill -0 "$ENVOY_PID" 2>/dev/null; then
     log "Envoy exited with code $EXIT_CODE"
-    if kill -0 "$PE_PID" 2>/dev/null; then
-        log "Terminating Policy Engine due to Envoy exit..."
-        kill -TERM "$PE_PID" 2>/dev/null || true
-        wait "$PE_PID" 2>/dev/null || true
-    fi
+elif [ -n "$ME_PID" ] && ! kill -0 "$ME_PID" 2>/dev/null; then
+    log "Mediation Engine exited with code $EXIT_CODE"
 fi
+
+terminate_if_running "Policy Engine" "$PE_PID"
+terminate_if_running "Envoy" "$ENVOY_PID"
+terminate_if_running "Mediation Engine" "$ME_PID"
 
 rm -f "${POLICY_ENGINE_SOCKET}"
 exit $EXIT_CODE

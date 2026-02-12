@@ -19,10 +19,10 @@ BINARY_NAME := mediation-engine
 .PHONY: build test clean
 
 build:
-    CGO_ENABLED=0 go build -o $(BINARY_NAME) ./cmd/server/main.go
+	CGO_ENABLED=0 go build -o $(BINARY_NAME) ./cmd/server/main.go
 
 test:
-    go test -race ./...
+	go test -race ./...
 
 clean:
-    rm -f $(BINARY_NAME)
+	rm -f $(BINARY_NAME)

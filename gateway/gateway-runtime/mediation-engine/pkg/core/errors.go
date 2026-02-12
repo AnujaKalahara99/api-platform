@@ -19,10 +19,11 @@ package core
 import "errors"
 
 var (
-	ErrNoRoute          = errors.New("no route found for source")
-	ErrTargetNotFound   = errors.New("delivery target not found")
-	ErrSessionNotFound  = errors.New("session not found")
-	ErrSessionClosed    = errors.New("session closed")
-	ErrClientSlow       = errors.New("client too slow, session terminated")
-	ErrBrokerDisconnect = errors.New("broker disconnected")
+	ErrNoRoute             = errors.New("no route found for source")
+	ErrTargetNotFound      = errors.New("delivery target not found")
+	ErrEndpointUnavailable = errors.New("endpoint unavailable")
+	ErrSessionNotFound     = errors.New("session not found")
+	ErrSessionClosed       = errors.New("session closed")
+	ErrClientSlow          = errors.New("client too slow, session terminated")
+	ErrBrokerDisconnect    = errors.New("broker disconnected")
 )

@@ -27,6 +27,7 @@ import (
 type Registry struct {
 	entrypoints map[string]core.Entrypoint
 	endpoints   map[string]core.Endpoint
+	healthy     map[string]bool
 	logger      *slog.Logger
 	mu          sync.RWMutex
 }
@@ -35,6 +36,7 @@ func NewRegistry(logger *slog.Logger) *Registry {
 	return &Registry{
 		entrypoints: make(map[string]core.Entrypoint),
 		endpoints:   make(map[string]core.Endpoint),
+		healthy:     make(map[string]bool),
 		logger:      logger,
 	}
 }
@@ -73,14 +75,26 @@ func (r *Registry) Endpoints() map[string]core.Endpoint {
 	return cp
 }
 
-func (r *Registry) ConnectEndpoints(ctx context.Context) error {
+func (r *Registry) ConnectEndpoints(ctx context.Context) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	connected := 0
 	for name, ep := range r.endpoints {
 		if err := ep.Connect(ctx); err != nil {
 			r.logger.Error("endpoint connect failed", "name", name, "error", err)
-			return err
+			r.healthy[name] = false
+		} else {
+			r.healthy[name] = true
+			connected++
 		}
 	}
-	return nil
+	return connected
+}
+
+func (r *Registry) IsEndpointHealthy(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.healthy[name]
 }
 
 func (r *Registry) StartEntrypoints(ctx context.Context, manager core.SessionManager) {

@@ -115,7 +115,28 @@ RUN --mount=type=cache,target=/go/pkg/mod \
         -policy-engine-src /api-platform/gateway/gateway-runtime/policy-engine \
         -out-dir /workspace/output
 
-# Stage 3: Runtime
+# Stage 3: Mediation Engine Build
+FROM --platform=$BUILDPLATFORM golang:1.25.6-alpine3.23 AS mediation-builder
+ARG BUILDARCH
+
+RUN apk add --no-cache git make ca-certificates
+
+WORKDIR /api-platform/gateway/gateway-runtime/mediation-engine
+COPY mediation-engine/go.mod mediation-engine/go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY mediation-engine/ .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 \
+    GOOS=linux \
+    GOARCH=${BUILDARCH} \
+    go build \
+    -o /usr/local/bin/mediation-engine \
+    ./cmd/server
+
+# Stage 4: Runtime
 FROM envoyproxy/envoy:v1.35.3
 
 ARG ENABLE_COVERAGE=false
@@ -137,11 +158,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 RUN mkdir -p /app /var/run/api-platform /coverage
 
 COPY --from=policy-compiler /workspace/output/policy-engine/policy-engine /app/policy-engine
+COPY --from=mediation-builder /usr/local/bin/mediation-engine /app/mediation-engine
 COPY router/config/envoy-bootstrap.yaml /etc/envoy/envoy.yaml
 COPY router/config/config-override.yaml /etc/envoy/config-override.yaml
+COPY mediation-engine/config.yaml /etc/mediation/config.yaml
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN chmod +x /app/policy-engine /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /app/policy-engine /app/mediation-engine /usr/local/bin/docker-entrypoint.sh
 
 RUN groupadd -r -g 10001 wso2 && \
     useradd -r -u 10001 -g wso2 -s /sbin/nologin -c "WSO2 Application User" wso2 && \
@@ -156,6 +179,6 @@ ENV GATEWAY_CONTROLLER_HOST=gateway-controller \
 
 USER wso2
 
-EXPOSE 8080 8443 9901 9002 9003
+EXPOSE 8080 8443 9901 9002 9003 8066 8067 8068 8069
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]

@@ -66,12 +66,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := registry.ConnectEndpoints(ctx); err != nil {
-		logger.Error("failed to connect endpoints", "error", err)
-		os.Exit(1)
-	}
+	connected := registry.ConnectEndpoints(ctx)
+	logger.Info("endpoint connectivity", "connected", connected, "total", len(cfg.Endpoints))
 
-	mgr := session.NewManager(routeTable, registry.Endpoints(), logger, packetLog)
+	mgr := session.NewManager(routeTable, registry.Endpoints(), registry, logger, packetLog)
 
 	watcher := config.NewWatcher(configPath, routeTable, logger)
 	go watcher.Watch(ctx)

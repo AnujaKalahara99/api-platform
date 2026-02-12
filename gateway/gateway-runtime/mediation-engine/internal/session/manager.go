@@ -33,10 +33,15 @@ type activeSession struct {
 	cancel  context.CancelFunc
 }
 
+type EndpointHealthChecker interface {
+	IsEndpointHealthy(name string) bool
+}
+
 type Manager struct {
 	sessions  sync.Map
 	routes    *routing.Table
 	endpoints map[string]core.Endpoint
+	health    EndpointHealthChecker
 	logger    *slog.Logger
 	packetLog *logging.PacketLogger
 }
@@ -44,12 +49,14 @@ type Manager struct {
 func NewManager(
 	routes *routing.Table,
 	endpoints map[string]core.Endpoint,
+	health EndpointHealthChecker,
 	logger *slog.Logger,
 	packetLog *logging.PacketLogger,
 ) *Manager {
 	return &Manager{
 		routes:    routes,
 		endpoints: endpoints,
+		health:    health,
 		logger:    logger,
 		packetLog: packetLog,
 	}
@@ -68,6 +75,10 @@ func (m *Manager) CreateSession(
 	ep, ok := m.endpoints[route.Target]
 	if !ok {
 		return nil, fmt.Errorf("%w: endpoint=%s", core.ErrTargetNotFound, route.Target)
+	}
+
+	if m.health != nil && !m.health.IsEndpointHealthy(route.Target) {
+		return nil, fmt.Errorf("%w: endpoint=%s", core.ErrEndpointUnavailable, route.Target)
 	}
 
 	channelSize := route.ChannelSize

@@ -56,6 +56,7 @@ help: ## Show this help message
 	@echo '  make test-controller           - Test gateway-controller'
 	@echo '  make test-gateway-builder      - Test gateway-builder'
 	@echo '  make test-policy-engine        - Test policy-engine'
+	@echo '  make test-mediation-engine     - Test mediation-engine'
 	@echo ''
 	@echo 'Integration Test Targets:'
 	@echo '  make test-integration-all      - Build coverage images and run integration tests'
@@ -146,7 +147,7 @@ build-and-push-multiarch-gateway-runtime: ## Build and push gateway-runtime Dock
 
 # Test Targets
 .PHONY: test
-test: test-controller test-gateway-builder test-policy-engine ## Run all tests
+test: test-controller test-gateway-builder test-policy-engine test-mediation-engine ## Run all tests
 
 .PHONY: test-controller
 test-controller: ## Test gateway-controller
@@ -159,6 +160,10 @@ test-gateway-builder: ## Test gateway-builder
 .PHONY: test-policy-engine
 test-policy-engine: ## Test policy-engine
 	$(MAKE) -C gateway-runtime test
+
+.PHONY: test-mediation-engine
+test-mediation-engine: ## Test mediation-engine
+	cd gateway-runtime/mediation-engine && go test -race ./...
 
 .PHONY: test-integration
 test-integration: ## Run integration tests

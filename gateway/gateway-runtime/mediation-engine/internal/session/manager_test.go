@@ -70,6 +70,22 @@ func (m *mockEndpoint) Send(ctx context.Context, evt core.Event) error {
 func (m *mockEndpoint) Connect(ctx context.Context) error    { return nil }
 func (m *mockEndpoint) Disconnect(ctx context.Context) error { return nil }
 
+type mockHealthChecker struct {
+	healthy map[string]bool
+}
+
+func newAllHealthy(names ...string) *mockHealthChecker {
+	h := &mockHealthChecker{healthy: make(map[string]bool)}
+	for _, n := range names {
+		h.healthy[n] = true
+	}
+	return h
+}
+
+func (m *mockHealthChecker) IsEndpointHealthy(name string) bool {
+	return m.healthy[name]
+}
+
 func TestCreateSession(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	routes := routing.NewTable()
@@ -78,7 +94,7 @@ func TestCreateSession(t *testing.T) {
 	ep := &mockEndpoint{name: "kafka"}
 	endpoints := map[string]core.Endpoint{"kafka": ep}
 
-	mgr := NewManager(routes, endpoints, logger, nil)
+	mgr := NewManager(routes, endpoints, newAllHealthy("kafka"), logger, nil)
 	ctx := context.Background()
 
 	sess, err := mgr.CreateSession(ctx, "ws-in", "client-1")
@@ -108,7 +124,7 @@ func TestCreateSession(t *testing.T) {
 func TestCreateSessionNoRoute(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	routes := routing.NewTable()
-	mgr := NewManager(routes, nil, logger, nil)
+	mgr := NewManager(routes, nil, nil, logger, nil)
 
 	_, err := mgr.CreateSession(context.Background(), "nonexistent", "client-1")
 	if !errors.Is(err, core.ErrNoRoute) {
@@ -121,7 +137,7 @@ func TestCreateSessionNoEndpoint(t *testing.T) {
 	routes := routing.NewTable()
 	routes.Add(&core.Route{Source: "ws-in", Target: "missing"})
 
-	mgr := NewManager(routes, map[string]core.Endpoint{}, logger, nil)
+	mgr := NewManager(routes, map[string]core.Endpoint{}, nil, logger, nil)
 
 	_, err := mgr.CreateSession(context.Background(), "ws-in", "client-1")
 	if !errors.Is(err, core.ErrTargetNotFound) {
@@ -131,7 +147,7 @@ func TestCreateSessionNoEndpoint(t *testing.T) {
 
 func TestDestroyNonexistentSession(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	mgr := NewManager(routing.NewTable(), nil, logger, nil)
+	mgr := NewManager(routing.NewTable(), nil, nil, logger, nil)
 
 	err := mgr.DestroySession("nonexistent")
 	if !errors.Is(err, core.ErrSessionNotFound) {
@@ -146,7 +162,7 @@ func TestDestroyAll(t *testing.T) {
 
 	ep := &mockEndpoint{name: "kafka"}
 	endpoints := map[string]core.Endpoint{"kafka": ep}
-	mgr := NewManager(routes, endpoints, logger, nil)
+	mgr := NewManager(routes, endpoints, newAllHealthy("kafka"), logger, nil)
 
 	for i := 0; i < 5; i++ {
 		_, _ = mgr.CreateSession(context.Background(), "ws-in", "client")
@@ -156,5 +172,21 @@ func TestDestroyAll(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 	if mgr.ActiveCount() != 0 {
 		t.Fatalf("expected 0 sessions, got %d", mgr.ActiveCount())
+	}
+}
+
+func TestCreateSessionEndpointUnavailable(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	routes := routing.NewTable()
+	routes.Add(&core.Route{Source: "ws-in", Target: "rabbitmq", ChannelSize: 1})
+
+	ep := &mockEndpoint{name: "rabbitmq"}
+	endpoints := map[string]core.Endpoint{"rabbitmq": ep}
+	unhealthy := &mockHealthChecker{healthy: map[string]bool{"rabbitmq": false}}
+	mgr := NewManager(routes, endpoints, unhealthy, logger, nil)
+
+	_, err := mgr.CreateSession(context.Background(), "ws-in", "client-1")
+	if !errors.Is(err, core.ErrEndpointUnavailable) {
+		t.Fatalf("expected ErrEndpointUnavailable, got %v", err)
 	}
 }
