@@ -1,0 +1,40 @@
+entrypoints:
+  - name: ws-inbound
+    type: websocket
+    port: 8066
+  - name: sse-feed
+    type: sse
+    port: 8067
+  - name: webhook-receiver
+    type: http_post
+    port: 8068
+  - name: polling-api
+    type: http_get
+    port: 8069
+
+endpoints:
+  - name: kafka-main
+    type: kafka
+    config:
+      brokers: "localhost:9092"
+      topic_in: "events-in"
+      topic_out: "events-out"
+      group_id: "mediation"
+  - name: rabbitmq-orders
+    type: rabbitmq
+    config:
+      url: "amqp://guest:guest@localhost:5672/"
+      queue_in: "orders-in"
+      queue_out: "orders-out"
+
+routes:
+  - source: ws-inbound
+    target: kafka-main
+    direction: upstream
+    delivery_guarantee: auto
+    channel_size: 1
+  - source: webhook-receiver
+    target: rabbitmq-orders
+    direction: upstream
+    delivery_guarantee: at_least_once
+    channel_size: 10
