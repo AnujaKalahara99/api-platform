@@ -1,4 +1,4 @@
-go 1.25.1
+go 1.25.6
 
 use (
 	./cli/it
@@ -6,6 +6,7 @@ use (
 	./common
 	./gateway/gateway-builder
 	./gateway/gateway-controller
+	./gateway/gateway-runtime/mediation-engine
 	./gateway/gateway-runtime/policy-engine
 	./gateway/it
 	./gateway/sample-policies/count-letters

@@ -72,7 +72,7 @@ func (e *Entrypoint) Start(ctx context.Context, manager core.SessionManager) err
 func (e *Entrypoint) Stop(ctx context.Context) error {
 	e.sessions.Range(func(_, val any) bool {
 		sess := val.(*core.Session)
-		e.manager.DestroySession(sess.ID)
+		e.manager.DestroySession(sess.ClientID)
 		return true
 	})
 	if e.server != nil {
@@ -87,11 +87,7 @@ func (e *Entrypoint) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientID := r.Header.Get("X-Client-ID")
-	if clientID == "" {
-		http.Error(w, "X-Client-ID header required", http.StatusBadRequest)
-		return
-	}
+	clientID := core.GenerateClientID(r)
 
 	sess, err := e.manager.CreateSession(r.Context(), e.name, clientID)
 	if err != nil {
@@ -103,7 +99,7 @@ func (e *Entrypoint) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	e.sessions.Store(clientID, sess)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(w, `{"session_id":"%s","client_id":"%s"}`, sess.ID, clientID)
+	fmt.Fprintf(w, `{"client_id":"%s"}`, clientID)
 }
 
 func (e *Entrypoint) handlePoll(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +108,7 @@ func (e *Entrypoint) handlePoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientID := r.Header.Get("X-Client-ID")
+	clientID := core.GenerateClientID(r)
 	val, ok := e.sessions.Load(clientID)
 	if !ok {
 		http.Error(w, "not subscribed, call /subscribe first", http.StatusNotFound)
@@ -150,15 +146,14 @@ func (e *Entrypoint) handleUnsubscribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientID := r.Header.Get("X-Client-ID")
-	val, ok := e.sessions.LoadAndDelete(clientID)
+	clientID := core.GenerateClientID(r)
+	_, ok := e.sessions.LoadAndDelete(clientID)
 	if !ok {
 		http.Error(w, "not subscribed", http.StatusNotFound)
 		return
 	}
 
-	sess := val.(*core.Session)
-	e.manager.DestroySession(sess.ID)
+	e.manager.DestroySession(clientID)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"unsubscribed"}`))

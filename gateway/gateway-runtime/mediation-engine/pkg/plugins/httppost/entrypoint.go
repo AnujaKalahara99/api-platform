@@ -93,10 +93,7 @@ func (e *Entrypoint) handlePost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	clientID := r.Header.Get("X-Client-ID")
-	if clientID == "" {
-		clientID = r.RemoteAddr
-	}
+	clientID := core.GenerateClientID(r)
 
 	sess, err := e.manager.CreateSession(r.Context(), e.name, clientID)
 	if err != nil {
@@ -104,7 +101,7 @@ func (e *Entrypoint) handlePost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "session creation failed", http.StatusInternalServerError)
 		return
 	}
-	defer e.manager.DestroySession(sess.ID)
+	defer e.manager.DestroySession(clientID)
 
 	evt := core.Event{
 		ID:        uuid.New().String(),

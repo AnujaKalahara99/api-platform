@@ -25,7 +25,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/internal/logging"
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/pkg/core"
 )
@@ -71,7 +70,7 @@ func (e *Entrypoint) Start(ctx context.Context, manager core.SessionManager) err
 func (e *Entrypoint) Stop(ctx context.Context) error {
 	e.sessions.Range(func(_, val any) bool {
 		sess := val.(*core.Session)
-		e.manager.DestroySession(sess.ID)
+		e.manager.DestroySession(sess.ClientID)
 		return true
 	})
 	if e.server != nil {
@@ -91,7 +90,7 @@ func (e *Entrypoint) handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	clientID := uuid.New().String()
+	clientID := core.GenerateClientID(r)
 	sess, err := e.manager.CreateSession(r.Context(), e.name, clientID)
 	if err != nil {
 		e.logger.Error("sse session creation failed", "error", err)
@@ -102,11 +101,11 @@ func (e *Entrypoint) handleSSE(w http.ResponseWriter, r *http.Request) {
 	e.sessions.Store(clientID, sess)
 	defer func() {
 		e.sessions.Delete(clientID)
-		e.manager.DestroySession(sess.ID)
+		e.manager.DestroySession(clientID)
 		e.logger.Info("sse client disconnected", "client_id", clientID)
 	}()
 
-	e.logger.Info("sse client connected", "client_id", clientID, "session_id", sess.ID)
+	e.logger.Info("sse client connected", "client_id", clientID)
 
 	for {
 		select {

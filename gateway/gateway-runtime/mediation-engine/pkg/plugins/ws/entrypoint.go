@@ -18,7 +18,7 @@ package ws
 
 import (
 	"context"
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -85,7 +85,7 @@ func (e *Entrypoint) Start(ctx context.Context, manager core.SessionManager) err
 func (e *Entrypoint) Stop(ctx context.Context) error {
 	e.sessions.Range(func(_, val any) bool {
 		sess := val.(*core.Session)
-		e.manager.DestroySession(sess.ID)
+		e.manager.DestroySession(sess.ClientID)
 		return true
 	})
 	if e.server != nil {
@@ -101,7 +101,7 @@ func (e *Entrypoint) handleConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientID := uuid.New().String()
+	clientID := core.GenerateClientID(r)
 
 	sess, err := e.manager.CreateSession(r.Context(), e.name, clientID)
 	if err != nil {
@@ -115,39 +115,34 @@ func (e *Entrypoint) handleConnection(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		conn.Close()
 		e.sessions.Delete(clientID)
-		e.manager.DestroySession(sess.ID)
-		e.logger.Info("ws client disconnected", "client_id", clientID, "session_id", sess.ID)
+		e.manager.DestroySession(clientID)
+		e.logger.Info("ws client disconnected", "client_id", clientID)
 	}()
 
-	e.logger.Info("ws client connected", "client_id", clientID, "session_id", sess.ID)
+	e.logger.Info("ws client connected", "client_id", clientID)
 
 	go e.downstreamLoop(conn, sess)
 	e.upstreamLoop(conn, sess)
 }
 
 func (e *Entrypoint) downstreamLoop(conn *websocket.Conn, sess *core.Session) {
-	for {
-		select {
-		case msg, ok := <-sess.Downstream:
-			if !ok {
-				return
-			}
-			data, err := json.Marshal(msg.Event)
-			if err != nil {
-				e.logger.Error("marshal downstream event failed", "session_id", sess.ID, "error", err)
-				continue
-			}
-			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
-				e.logger.Error("ws write failed", "session_id", sess.ID, "error", err)
-				return
-			}
-			if e.packetLog != nil && sess.Route != nil {
-				e.packetLog.Log(msg.Event, sess.Route, "downstream")
-			}
-			if msg.Ack != nil {
-				if err := msg.Ack(); err != nil {
-					e.logger.Warn("ack failed", "session_id", sess.ID, "error", err)
-				}
+	for msg := range sess.Downstream {
+		data := msg.Event.Payload
+		// data, err := json.Marshal(msg.Event)
+		// if err != nil {
+		// 	e.logger.Error("marshal downstream event failed", "client_id", sess.ClientID, "error", err)
+		// 	continue
+		// }
+		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			e.logger.Error("ws write failed", "client_id", sess.ClientID, "error", err)
+			return
+		}
+		if e.packetLog != nil && sess.Route != nil {
+			e.packetLog.Log(msg.Event, sess.Route, "downstream")
+		}
+		if msg.Ack != nil {
+			if err := msg.Ack(); err != nil {
+				e.logger.Warn("ack failed", "client_id", sess.ClientID, "error", err)
 			}
 		}
 	}
@@ -158,7 +153,7 @@ func (e *Entrypoint) upstreamLoop(conn *websocket.Conn, sess *core.Session) {
 		_, payload, err := conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				e.logger.Error("ws read error", "session_id", sess.ID, "error", err)
+				e.logger.Error("ws read error", "client_id", sess.ClientID, "error", err)
 			}
 			return
 		}
@@ -176,7 +171,7 @@ func (e *Entrypoint) upstreamLoop(conn *websocket.Conn, sess *core.Session) {
 		select {
 		case sess.Upstream <- evt:
 		default:
-			e.logger.Warn("upstream channel full, dropping event", "session_id", sess.ID)
+			e.logger.Warn("upstream channel full, dropping event", "client_id", sess.ClientID)
 		}
 	}
 }

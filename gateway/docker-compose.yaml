@@ -72,6 +72,8 @@ services:
     volumes:
       - ./configs/config.toml:/etc/policy-engine/config.toml:ro
       - ./gateway-runtime/mediation-engine/config.yaml:/etc/mediation/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - gateway-network
 

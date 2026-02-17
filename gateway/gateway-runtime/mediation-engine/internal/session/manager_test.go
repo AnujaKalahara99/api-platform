@@ -114,7 +114,7 @@ func TestCreateSession(t *testing.T) {
 		t.Fatalf("expected 1 active session, got %d", mgr.ActiveCount())
 	}
 
-	_ = mgr.DestroySession(sess.ID)
+	_ = mgr.DestroySession("client-1")
 	time.Sleep(10 * time.Millisecond)
 	if mgr.ActiveCount() != 0 {
 		t.Fatalf("expected 0 active sessions after destroy, got %d", mgr.ActiveCount())

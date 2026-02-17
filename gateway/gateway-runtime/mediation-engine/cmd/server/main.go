@@ -116,10 +116,15 @@ func registerEndpoints(cfg *config.Config, reg *plugins.Registry, logger *slog.L
 		switch e.Type {
 		case "kafka":
 			brokers := strings.Split(e.Config["brokers"], ",")
+			tlsEnabled := strings.EqualFold(e.Config["tls_enabled"], "true")
 			reg.RegisterEndpoint(kafka.New(
 				e.Name, brokers,
 				e.Config["topic_in"], e.Config["topic_out"],
 				e.Config["group_id"],
+				e.Config["sasl_mechanism"],
+				e.Config["sasl_username"],
+				e.Config["sasl_password"],
+				tlsEnabled,
 				logger,
 			))
 		case "rabbitmq":

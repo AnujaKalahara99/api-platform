@@ -22,7 +22,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/google/uuid"
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/internal/logging"
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/internal/routing"
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/pkg/core"
@@ -87,10 +86,9 @@ func (m *Manager) CreateSession(
 	}
 
 	sessionCtx, sessionCancel := context.WithCancel(ctx)
-	sessionID := uuid.New().String()
 
 	sess := &core.Session{
-		ID:             sessionID,
+		ID:             clientID,
 		ClientID:       clientID,
 		EntrypointName: entrypointName,
 		Route:          route,
@@ -99,7 +97,7 @@ func (m *Manager) CreateSession(
 		Cancel:         sessionCancel,
 	}
 
-	m.sessions.Store(sessionID, &activeSession{
+	m.sessions.Store(clientID, &activeSession{
 		session: sess,
 		cancel:  sessionCancel,
 	})
@@ -107,12 +105,12 @@ func (m *Manager) CreateSession(
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				m.logger.Error("consumer panic recovered", "session_id", sessionID, "error", r)
+				m.logger.Error("consumer panic recovered", "client_id", clientID, "error", r)
 			}
 		}()
 		if err := ep.StartConsumer(sessionCtx, sess, sess.Downstream); err != nil {
 			if sessionCtx.Err() == nil {
-				m.logger.Error("consumer error", "session_id", sessionID, "error", err)
+				m.logger.Error("consumer error", "client_id", clientID, "error", err)
 			}
 		}
 	}()
@@ -120,7 +118,7 @@ func (m *Manager) CreateSession(
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				m.logger.Error("upstream relay panic recovered", "session_id", sessionID, "error", r)
+				m.logger.Error("upstream relay panic recovered", "client_id", clientID, "error", r)
 			}
 		}()
 		for {
@@ -136,7 +134,7 @@ func (m *Manager) CreateSession(
 				}
 				if err := ep.Send(sessionCtx, evt); err != nil {
 					if sessionCtx.Err() == nil {
-						m.logger.Error("upstream send failed", "session_id", sessionID, "error", err)
+						m.logger.Error("upstream send failed", "client_id", clientID, "error", err)
 					}
 					return
 				}
@@ -145,7 +143,6 @@ func (m *Manager) CreateSession(
 	}()
 
 	m.logger.Info("session created",
-		"session_id", sessionID,
 		"client_id", clientID,
 		"entrypoint", entrypointName,
 		"target", route.Target,
@@ -155,10 +152,10 @@ func (m *Manager) CreateSession(
 	return sess, nil
 }
 
-func (m *Manager) DestroySession(sessionID string) error {
-	val, ok := m.sessions.LoadAndDelete(sessionID)
+func (m *Manager) DestroySession(clientID string) error {
+	val, ok := m.sessions.LoadAndDelete(clientID)
 	if !ok {
-		return fmt.Errorf("%w: id=%s", core.ErrSessionNotFound, sessionID)
+		return fmt.Errorf("%w: client_id=%s", core.ErrSessionNotFound, clientID)
 	}
 
 	as := val.(*activeSession)
@@ -166,16 +163,13 @@ func (m *Manager) DestroySession(sessionID string) error {
 
 	if as.session.Route != nil {
 		if ep, ok := m.endpoints[as.session.Route.Target]; ok {
-			if err := ep.StopConsumer(sessionID); err != nil {
-				m.logger.Warn("stop consumer error", "session_id", sessionID, "error", err)
+			if err := ep.StopConsumer(clientID); err != nil {
+				m.logger.Warn("stop consumer error", "client_id", clientID, "error", err)
 			}
 		}
 	}
 
-	m.logger.Info("session destroyed",
-		"session_id", sessionID,
-		"client_id", as.session.ClientID,
-	)
+	m.logger.Info("session destroyed", "client_id", clientID)
 
 	return nil
 }
@@ -194,17 +188,4 @@ func (m *Manager) ActiveCount() int {
 		return true
 	})
 	return count
-}
-
-func (m *Manager) SessionByClientID(clientID string) (*core.Session, bool) {
-	var found *core.Session
-	m.sessions.Range(func(_, val any) bool {
-		as := val.(*activeSession)
-		if as.session.ClientID == clientID {
-			found = as.session
-			return false
-		}
-		return true
-	})
-	return found, found != nil
 }
