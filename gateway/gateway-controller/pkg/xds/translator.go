@@ -206,6 +206,15 @@ func (t *Translator) TranslateConfigs(
 					slog.Any("error", err))
 				continue
 			}
+		} else if cfg.Configuration.Kind == api.MediationApi {
+			routesList, clusterList, err = t.translateMediationAPIConfig(cfg)
+			if err != nil {
+				log.Error("Failed to translate mediation config",
+					slog.String("id", cfg.ID),
+					slog.String("displayName", cfg.GetDisplayName()),
+					slog.Any("error", err))
+				continue
+			}
 		} else {
 			routesList, clusterList, err = t.translateAPIConfig(cfg, configs)
 			if err != nil {
@@ -311,6 +320,12 @@ func (t *Translator) TranslateConfigs(
 	if t.routerConfig.PolicyEngine.Enabled {
 		policyEngineCluster := t.createPolicyEngineCluster()
 		clusters = append(clusters, policyEngineCluster)
+	}
+
+	// Add mediation engine cluster if enabled
+	if t.routerConfig.MediationEngine.Enabled {
+		mediationEngineCluster := t.createMediationEngineCluster()
+		clusters = append(clusters, mediationEngineCluster)
 	}
 
 	// Add ALS cluster if gRPC access log is enabled
@@ -672,6 +687,13 @@ func (t *Translator) createListener(virtualHosts []*route.VirtualHost, isHTTPS b
 		HttpFilters:                httpFilters,
 		ServerHeaderTransformation: convertServerHeaderTransformation(t.routerConfig.HTTPListener.ServerHeaderTransformation),
 		ServerName:                 t.routerConfig.HTTPListener.ServerHeaderValue,
+	}
+
+	// Enable WebSocket upgrade if mediation engine is enabled
+	if t.routerConfig.MediationEngine.Enabled {
+		manager.UpgradeConfigs = []*hcm.HttpConnectionManager_UpgradeConfig{
+			{UpgradeType: "websocket"},
+		}
 	}
 
 	// Add access logs if enabled
@@ -2633,4 +2655,143 @@ func resolveTimeoutFromDefinition(def *api.UpstreamDefinition) (*resolvedTimeout
 	}
 
 	return &rt, nil
+}
+
+// translateMediationAPIConfig translates a MediationApi configuration into Envoy routes and clusters.
+// Each entrypoint name gets a route that matches /{context}/{version}/{entrypoint-name}(/.*)? and
+// rewrites the path to /{entrypoint-name}... before sending to the mediation engine cluster.
+func (t *Translator) translateMediationAPIConfig(cfg *models.StoredConfig) ([]*route.Route, []*cluster.Cluster, error) {
+	apiData, err := cfg.Configuration.Spec.AsMediationAPIData()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to parse MediationApi config data: %w", err)
+	}
+
+	var routes []*route.Route
+
+	// Determine vhost
+	vhost := t.routerConfig.VHosts.Main.Default
+	if apiData.Vhosts != nil && apiData.Vhosts.Main != "" {
+		vhost = apiData.Vhosts.Main
+	}
+
+	contextWithVersion := ConstructFullPath(apiData.Context, apiData.Version, "")
+
+	for _, ep := range apiData.Entrypoints {
+		// Build regex: /{context}/{version}/{entrypoint-name}(/.*)?
+		regexPattern := fmt.Sprintf("^%s/%s(/.*)?$", regexp.QuoteMeta(contextWithVersion), regexp.QuoteMeta(ep.Name))
+		// Rewrite to: /{entrypoint-name}\1
+		rewriteSubstitution := fmt.Sprintf("/%s\\1", ep.Name)
+
+		routeName := fmt.Sprintf("MEDIATION|%s/%s|%s", contextWithVersion, ep.Name, vhost)
+
+		// Build metadata for policy engine / analytics
+		metadataFields := map[string]*structpb.Value{
+			"api_kind":    structpb.NewStringValue("MediationApi"),
+			"api_name":    structpb.NewStringValue(apiData.DisplayName),
+			"api_version": structpb.NewStringValue(apiData.Version),
+			"api_context": structpb.NewStringValue(apiData.Context),
+			"entrypoint":  structpb.NewStringValue(ep.Name),
+		}
+
+		r := &route.Route{
+			Name: routeName,
+			Match: &route.RouteMatch{
+				PathSpecifier: &route.RouteMatch_SafeRegex{
+					SafeRegex: &matcher.RegexMatcher{
+						Regex: regexPattern,
+					},
+				},
+			},
+			Action: &route.Route_Route{
+				Route: &route.RouteAction{
+					ClusterSpecifier: &route.RouteAction_Cluster{
+						Cluster: constants.MediationEngineClusterName,
+					},
+					RegexRewrite: &matcher.RegexMatchAndSubstitute{
+						Pattern: &matcher.RegexMatcher{
+							Regex: regexPattern,
+						},
+						Substitution: rewriteSubstitution,
+					},
+					UpgradeConfigs: []*route.RouteAction_UpgradeConfig{
+						{UpgradeType: "websocket"},
+					},
+					Timeout: durationpb.New(0), // No timeout for streaming connections
+				},
+			},
+			Metadata: &core.Metadata{
+				FilterMetadata: map[string]*structpb.Struct{
+					constants.ExtProcMetadataNamespace: {Fields: metadataFields},
+				},
+			},
+		}
+
+		routes = append(routes, r)
+	}
+
+	// No clusters generated here — mediation engine cluster is added centrally
+	return routes, nil, nil
+}
+
+// createMediationEngineCluster creates an Envoy cluster for the mediation engine.
+// Supports UDS (default) and TCP modes, mirroring the policy engine cluster pattern.
+func (t *Translator) createMediationEngineCluster() *cluster.Cluster {
+	mediationEngine := t.routerConfig.MediationEngine
+
+	var address *core.Address
+
+	if mediationEngine.Mode == "tcp" {
+		address = &core.Address{
+			Address: &core.Address_SocketAddress{
+				SocketAddress: &core.SocketAddress{
+					Protocol: core.SocketAddress_TCP,
+					Address:  mediationEngine.Host,
+					PortSpecifier: &core.SocketAddress_PortValue{
+						PortValue: mediationEngine.Port,
+					},
+				},
+			},
+		}
+	} else {
+		// UDS mode (default)
+		socketPath := mediationEngine.SocketPath
+		if socketPath == "" {
+			socketPath = constants.DefaultMediationEngineSocketPath
+		}
+		address = &core.Address{
+			Address: &core.Address_Pipe{
+				Pipe: &core.Pipe{
+					Path: socketPath,
+				},
+			},
+		}
+	}
+
+	lbEndpoint := &endpoint.LbEndpoint{
+		HostIdentifier: &endpoint.LbEndpoint_Endpoint{
+			Endpoint: &endpoint.Endpoint{
+				Address: address,
+			},
+		},
+	}
+
+	localityLbEndpoints := &endpoint.LocalityLbEndpoints{
+		LbEndpoints: []*endpoint.LbEndpoint{lbEndpoint},
+	}
+
+	clusterType := cluster.Cluster_STATIC
+	if mediationEngine.Mode == "tcp" {
+		clusterType = cluster.Cluster_STRICT_DNS
+	}
+
+	return &cluster.Cluster{
+		Name:                 constants.MediationEngineClusterName,
+		ConnectTimeout:       durationpb.New(5 * time.Second),
+		ClusterDiscoveryType: &cluster.Cluster_Type{Type: clusterType},
+		LbPolicy:             cluster.Cluster_ROUND_ROBIN,
+		LoadAssignment: &endpoint.ClusterLoadAssignment{
+			ClusterName: constants.MediationEngineClusterName,
+			Endpoints:   []*endpoint.LocalityLbEndpoints{localityLbEndpoints},
+		},
+	}
 }

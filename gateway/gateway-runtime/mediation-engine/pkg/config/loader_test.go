@@ -29,7 +29,6 @@ func TestLoad(t *testing.T) {
 entrypoints:
   - name: ws-in
     type: websocket
-    port: 8066
 endpoints:
   - name: kafka-main
     type: kafka

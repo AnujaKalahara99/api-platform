@@ -86,10 +86,10 @@ func (v *APIValidator) validateAPIConfiguration(config *api.APIConfiguration) []
 	}
 
 	// Validate kind
-	if config.Kind != api.RestApi && config.Kind != api.WebSubApi {
+	if config.Kind != api.RestApi && config.Kind != api.WebSubApi && config.Kind != api.MediationApi {
 		errors = append(errors, ValidationError{
 			Field:   "kind",
-			Message: "Unsupported API kind (only 'RestApi' and 'WebSubApi' are supported)",
+			Message: "Unsupported API kind (only 'RestApi', 'WebSubApi', and 'MediationApi' are supported)",
 		})
 	}
 
@@ -115,6 +115,16 @@ func (v *APIValidator) validateAPIConfiguration(config *api.APIConfiguration) []
 		} else {
 			// Validate data section
 			errors = append(errors, v.validateAsyncData(&spec)...)
+		}
+	case api.MediationApi:
+		spec, err := config.Spec.AsMediationAPIData()
+		if err != nil {
+			errors = append(errors, ValidationError{
+				Field:   "spec",
+				Message: fmt.Sprintf("Invalid spec format for MediationApi: %v", err),
+			})
+		} else {
+			errors = append(errors, v.validateMediationData(&spec)...)
 		}
 	}
 

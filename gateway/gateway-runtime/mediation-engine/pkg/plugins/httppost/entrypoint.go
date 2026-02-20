@@ -18,7 +18,6 @@ package httppost
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -31,18 +30,15 @@ import (
 
 type Entrypoint struct {
 	name      string
-	port      int
 	manager   core.SessionManager
-	server    *http.Server
 	logger    *slog.Logger
 	packetLog *logging.PacketLogger
 	maxBody   int64
 }
 
-func New(name string, port int, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
+func New(name string, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
 	return &Entrypoint{
 		name:      name,
-		port:      port,
 		logger:    logger,
 		packetLog: packetLog,
 		maxBody:   1 << 20,
@@ -52,31 +48,14 @@ func New(name string, port int, logger *slog.Logger, packetLog *logging.PacketLo
 func (e *Entrypoint) Name() string { return e.name }
 func (e *Entrypoint) Type() string { return "http_post" }
 
-func (e *Entrypoint) Start(ctx context.Context, manager core.SessionManager) error {
+func (e *Entrypoint) RegisterRoutes(mux *http.ServeMux, manager core.SessionManager) {
 	e.manager = manager
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", e.handlePost)
-
-	e.server = &http.Server{Addr: fmt.Sprintf(":%d", e.port), Handler: mux}
-
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		e.server.Shutdown(shutdownCtx)
-	}()
-
-	e.logger.Info("http_post entrypoint starting", "name", e.name, "port", e.port)
-	if err := e.server.ListenAndServe(); err != http.ErrServerClosed {
-		return err
-	}
-	return nil
+	pattern := "/" + e.name
+	mux.HandleFunc(pattern, e.handlePost)
+	e.logger.Info("http_post entrypoint registered", "name", e.name, "pattern", pattern)
 }
 
 func (e *Entrypoint) Stop(ctx context.Context) error {
-	if e.server != nil {
-		return e.server.Shutdown(ctx)
-	}
 	return nil
 }
 

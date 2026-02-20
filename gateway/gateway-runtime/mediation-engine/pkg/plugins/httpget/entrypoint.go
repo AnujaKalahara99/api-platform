@@ -31,42 +31,28 @@ import (
 
 type Entrypoint struct {
 	name      string
-	port      int
 	manager   core.SessionManager
-	server    *http.Server
 	logger    *slog.Logger
 	packetLog *logging.PacketLogger
 	sessions  sync.Map
 }
 
-func New(name string, port int, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
-	return &Entrypoint{name: name, port: port, logger: logger, packetLog: packetLog}
+func New(name string, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
+	return &Entrypoint{name: name, logger: logger, packetLog: packetLog}
 }
 
 func (e *Entrypoint) Name() string { return e.name }
 func (e *Entrypoint) Type() string { return "http_get" }
 
-func (e *Entrypoint) Start(ctx context.Context, manager core.SessionManager) error {
+func (e *Entrypoint) RegisterRoutes(mux *http.ServeMux, manager core.SessionManager) {
 	e.manager = manager
-	mux := http.NewServeMux()
-	mux.HandleFunc("/subscribe", e.handleSubscribe)
-	mux.HandleFunc("/poll", e.handlePoll)
-	mux.HandleFunc("/unsubscribe", e.handleUnsubscribe)
-
-	e.server = &http.Server{Addr: fmt.Sprintf(":%d", e.port), Handler: mux}
-
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		e.server.Shutdown(shutdownCtx)
-	}()
-
-	e.logger.Info("http_get entrypoint starting", "name", e.name, "port", e.port)
-	if err := e.server.ListenAndServe(); err != http.ErrServerClosed {
-		return err
-	}
-	return nil
+	prefix := "/" + e.name + "/"
+	subMux := http.NewServeMux()
+	subMux.HandleFunc("/subscribe", e.handleSubscribe)
+	subMux.HandleFunc("/poll", e.handlePoll)
+	subMux.HandleFunc("/unsubscribe", e.handleUnsubscribe)
+	mux.Handle(prefix, http.StripPrefix("/"+e.name, subMux))
+	e.logger.Info("http_get entrypoint registered", "name", e.name, "prefix", prefix)
 }
 
 func (e *Entrypoint) Stop(ctx context.Context) error {
@@ -75,9 +61,6 @@ func (e *Entrypoint) Stop(ctx context.Context) error {
 		e.manager.DestroySession(sess.ClientID)
 		return true
 	})
-	if e.server != nil {
-		return e.server.Shutdown(ctx)
-	}
 	return nil
 }
 

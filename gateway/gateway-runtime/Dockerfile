@@ -179,6 +179,6 @@ ENV GATEWAY_CONTROLLER_HOST=gateway-controller \
 
 USER wso2
 
-EXPOSE 8080 8443 9901 9002 9003 8066 8067 8068 8069
+EXPOSE 8080 8443 9901 9002 9003
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]

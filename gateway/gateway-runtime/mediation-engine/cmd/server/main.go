@@ -53,7 +53,9 @@ func main() {
 	}
 
 	packetLog := logging.NewPacketLogger(logger.With("component", "packet"))
-	registry := plugins.NewRegistry(logger)
+
+	socketPath := os.Getenv("MEDIATION_SOCKET_PATH")
+	registry := plugins.NewRegistry(logger, socketPath)
 
 	registerEntrypoints(cfg, registry, logger, packetLog)
 	registerEndpoints(cfg, registry, logger)
@@ -76,7 +78,7 @@ func main() {
 
 	registry.StartEntrypoints(ctx, mgr)
 
-	logger.Info("mediation engine started", "config", configPath)
+	logger.Info("mediation engine started", "config", configPath, "socket", registry.SocketPath())
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
@@ -98,13 +100,13 @@ func registerEntrypoints(cfg *config.Config, reg *plugins.Registry, logger *slog
 	for _, e := range cfg.Entrypoints {
 		switch e.Type {
 		case "websocket":
-			reg.RegisterEntrypoint(ws.New(e.Name, e.Port, logger, packetLog))
+			reg.RegisterEntrypoint(ws.New(e.Name, logger, packetLog))
 		case "sse":
-			reg.RegisterEntrypoint(sse.New(e.Name, e.Port, logger, packetLog))
+			reg.RegisterEntrypoint(sse.New(e.Name, logger, packetLog))
 		case "http_post":
-			reg.RegisterEntrypoint(httppost.New(e.Name, e.Port, logger, packetLog))
+			reg.RegisterEntrypoint(httppost.New(e.Name, logger, packetLog))
 		case "http_get":
-			reg.RegisterEntrypoint(httpget.New(e.Name, e.Port, logger, packetLog))
+			reg.RegisterEntrypoint(httpget.New(e.Name, logger, packetLog))
 		default:
 			logger.Warn("unknown entrypoint type", "name", e.Name, "type", e.Type)
 		}

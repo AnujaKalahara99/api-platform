@@ -191,6 +191,10 @@ gateway_controller:
         # Skip server certificate verification (insecure, development only)
         skip_verify: false
 
+    # Mediation Engine cluster configuration
+    mediation_engine:
+      enabled: true
+      mode: uds
 
   # Authentication configuration
   # - If BOTH `basic.enabled` and `idp.enabled` are false, all requests are allowed without authentication.

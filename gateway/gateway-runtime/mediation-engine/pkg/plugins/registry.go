@@ -19,7 +19,12 @@ package plugins
 import (
 	"context"
 	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/pkg/core"
 )
@@ -30,14 +35,20 @@ type Registry struct {
 	healthy     map[string]bool
 	logger      *slog.Logger
 	mu          sync.RWMutex
+	server      *http.Server
+	socketPath  string
 }
 
-func NewRegistry(logger *slog.Logger) *Registry {
+func NewRegistry(logger *slog.Logger, socketPath string) *Registry {
+	if socketPath == "" {
+		socketPath = core.DefaultMediationSocketPath
+	}
 	return &Registry{
 		entrypoints: make(map[string]core.Entrypoint),
 		endpoints:   make(map[string]core.Endpoint),
 		healthy:     make(map[string]bool),
 		logger:      logger,
+		socketPath:  socketPath,
 	}
 }
 
@@ -97,17 +108,65 @@ func (r *Registry) IsEndpointHealthy(name string) bool {
 	return r.healthy[name]
 }
 
+func (r *Registry) SocketPath() string {
+	return r.socketPath
+}
+
 func (r *Registry) StartEntrypoints(ctx context.Context, manager core.SessionManager) {
-	for name, ep := range r.entrypoints {
-		go func(n string, e core.Entrypoint) {
-			if err := e.Start(ctx, manager); err != nil {
-				r.logger.Error("entrypoint failed", "name", n, "error", err)
-			}
-		}(name, ep)
+	mux := http.NewServeMux()
+
+	// Register routes for all entrypoints
+	for _, ep := range r.entrypoints {
+		ep.RegisterRoutes(mux, manager)
 	}
+
+	// Health check endpoint
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	r.server = &http.Server{Handler: mux}
+
+	// Ensure the socket directory exists
+	socketDir := filepath.Dir(r.socketPath)
+	if err := os.MkdirAll(socketDir, 0755); err != nil {
+		r.logger.Error("failed to create socket directory", "path", socketDir, "error", err)
+		return
+	}
+
+	// Remove stale socket
+	os.Remove(r.socketPath)
+
+	ln, err := net.Listen("unix", r.socketPath)
+	if err != nil {
+		r.logger.Error("failed to listen on UDS", "path", r.socketPath, "error", err)
+		return
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		r.server.Shutdown(shutdownCtx)
+	}()
+
+	r.logger.Info("mediation engine UDS server starting", "socket", r.socketPath)
+	go func() {
+		if err := r.server.Serve(ln); err != nil && err != http.ErrServerClosed {
+			r.logger.Error("UDS server failed", "error", err)
+		}
+	}()
 }
 
 func (r *Registry) StopAll(ctx context.Context) {
+	// Stop the UDS server
+	if r.server != nil {
+		r.logger.Info("stopping UDS server")
+		r.server.Shutdown(ctx)
+		os.Remove(r.socketPath)
+	}
 	for name, ep := range r.entrypoints {
 		r.logger.Info("stopping entrypoint", "name", name)
 		ep.Stop(ctx)

@@ -16,12 +16,18 @@
 
 package core
 
-import "context"
+import (
+	"context"
+	"net/http"
+)
+
+// DefaultMediationSocketPath is the default UDS socket path for the mediation engine
+const DefaultMediationSocketPath = "/var/run/api-platform/mediation-engine.sock"
 
 type Entrypoint interface {
 	Name() string
 	Type() string
-	Start(ctx context.Context, manager SessionManager) error
+	RegisterRoutes(mux *http.ServeMux, manager SessionManager)
 	Stop(ctx context.Context) error
 }
 

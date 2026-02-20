@@ -18,8 +18,6 @@ package ws
 
 import (
 	"context"
-	// "encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -33,19 +31,16 @@ import (
 
 type Entrypoint struct {
 	name      string
-	port      int
 	upgrader  websocket.Upgrader
 	manager   core.SessionManager
-	server    *http.Server
 	logger    *slog.Logger
 	packetLog *logging.PacketLogger
 	sessions  sync.Map
 }
 
-func New(name string, port int, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
+func New(name string, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
 	return &Entrypoint{
 		name: name,
-		port: port,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -57,29 +52,11 @@ func New(name string, port int, logger *slog.Logger, packetLog *logging.PacketLo
 func (e *Entrypoint) Name() string { return e.name }
 func (e *Entrypoint) Type() string { return "websocket" }
 
-func (e *Entrypoint) Start(ctx context.Context, manager core.SessionManager) error {
+func (e *Entrypoint) RegisterRoutes(mux *http.ServeMux, manager core.SessionManager) {
 	e.manager = manager
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", e.handleConnection)
-
-	e.server = &http.Server{
-		Addr:    fmt.Sprintf(":%d", e.port),
-		Handler: mux,
-	}
-
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		e.server.Shutdown(shutdownCtx)
-	}()
-
-	e.logger.Info("websocket entrypoint starting", "name", e.name, "port", e.port)
-	if err := e.server.ListenAndServe(); err != http.ErrServerClosed {
-		return err
-	}
-	return nil
+	pattern := "/" + e.name
+	mux.HandleFunc(pattern, e.handleConnection)
+	e.logger.Info("websocket entrypoint registered", "name", e.name, "pattern", pattern)
 }
 
 func (e *Entrypoint) Stop(ctx context.Context) error {
@@ -88,9 +65,6 @@ func (e *Entrypoint) Stop(ctx context.Context) error {
 		e.manager.DestroySession(sess.ClientID)
 		return true
 	})
-	if e.server != nil {
-		return e.server.Shutdown(ctx)
-	}
 	return nil
 }
 

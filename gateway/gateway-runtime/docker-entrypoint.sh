@@ -93,6 +93,7 @@ export LOG_LEVEL="${LOG_LEVEL:-info}"
 # Mediation Engine configuration
 export MEDIATION_CONFIG_PATH="${MEDIATION_CONFIG_PATH:-/etc/mediation/config.yaml}"
 export MEDIATION_ENABLED="${MEDIATION_ENABLED:-false}"
+export MEDIATION_SOCKET_PATH="${MEDIATION_SOCKET_PATH:-/var/run/api-platform/mediation-engine.sock}"
 
 # Derive Router (Envoy) xDS config — used by envsubst on config-override.yaml
 export XDS_SERVER_HOST="${GATEWAY_CONTROLLER_HOST}"
@@ -118,6 +119,7 @@ fi
 
 # Cleanup stale socket from previous runs
 rm -f "${POLICY_ENGINE_SOCKET}"
+rm -f "${MEDIATION_SOCKET_PATH}"
 
 # Generate Envoy config override by substituting environment variables
 CONFIG_OVERRIDE=$(envsubst < /etc/envoy/config-override.yaml)
@@ -192,6 +194,36 @@ while [ ! -S "${POLICY_ENGINE_SOCKET}" ]; do
 done
 log "Policy Engine socket ready: ${POLICY_ENGINE_SOCKET}"
 
+# Start Mediation Engine if enabled (before Envoy so socket is ready)
+if [ "${MEDIATION_ENABLED}" = "true" ]; then
+    log "Starting Mediation Engine..."
+    CONFIG_PATH="${MEDIATION_CONFIG_PATH}" MEDIATION_SOCKET_PATH="${MEDIATION_SOCKET_PATH}" /app/mediation-engine "${ME_ARGS[@]}" \
+        > >(while IFS= read -r line; do echo "[med] $line"; done) \
+        2> >(while IFS= read -r line; do echo "[med] $line" >&2; done) &
+    ME_PID=$!
+    log "Mediation Engine started (PID $ME_PID)"
+
+    # Wait for Mediation Engine to create UDS socket
+    ME_SOCKET_WAIT_TIMEOUT=10
+    ME_SOCKET_WAIT_COUNT=0
+    while [ ! -S "${MEDIATION_SOCKET_PATH}" ]; do
+        if [ $ME_SOCKET_WAIT_COUNT -ge $ME_SOCKET_WAIT_TIMEOUT ]; then
+            log "ERROR: Mediation Engine socket not created within ${ME_SOCKET_WAIT_TIMEOUT}s"
+            if ! kill -0 "$ME_PID" 2>/dev/null; then
+                log "ERROR: Mediation Engine process has exited"
+            fi
+            exit 1
+        fi
+        if ! kill -0 "$ME_PID" 2>/dev/null; then
+            log "ERROR: Mediation Engine exited before creating socket"
+            exit 1
+        fi
+        sleep 1
+        ME_SOCKET_WAIT_COUNT=$((ME_SOCKET_WAIT_COUNT + 1))
+    done
+    log "Mediation Engine socket ready: ${MEDIATION_SOCKET_PATH}"
+fi
+
 # Start Envoy (Router) with [rtr] log prefix
 log "Starting Envoy..."
 /usr/local/bin/envoy \
@@ -204,14 +236,7 @@ log "Starting Envoy..."
 ENVOY_PID=$!
 log "Envoy started (PID $ENVOY_PID)"
 
-# Start Mediation Engine if enabled, with [med] log prefix
-if [ "${MEDIATION_ENABLED}" = "true" ]; then
-    log "Starting Mediation Engine..."
-    CONFIG_PATH="${MEDIATION_CONFIG_PATH}" /app/mediation-engine "${ME_ARGS[@]}" \
-        > >(while IFS= read -r line; do echo "[med] $line"; done) \
-        2> >(while IFS= read -r line; do echo "[med] $line" >&2; done) &
-    ME_PID=$!
-    log "Mediation Engine started (PID $ME_PID)"
+if [ -n "$ME_PID" ]; then
     log "Gateway Runtime running - Policy Engine (PID $PE_PID), Envoy (PID $ENVOY_PID), Mediation Engine (PID $ME_PID)"
 else
     log "Gateway Runtime running - Policy Engine (PID $PE_PID), Envoy (PID $ENVOY_PID)"

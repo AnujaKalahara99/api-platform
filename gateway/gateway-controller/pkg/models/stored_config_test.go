@@ -110,3 +110,126 @@ func TestStoredConfig_SourceConfiguration(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "API", sc["kind"])
 }
+
+func TestStoredConfig_MediationApi_GetCompositeKey(t *testing.T) {
+	apiConfig := api.APIConfiguration{
+		Kind: api.MediationApi,
+	}
+	spec := api.MediationAPIData{
+		DisplayName: "TestMediation",
+		Version:     "v1.0",
+		Context:     "/mediation",
+		Entrypoints: []api.MediationEntrypoint{{Name: "ws-in"}},
+	}
+	apiConfig.Spec.FromMediationAPIData(spec)
+
+	config := &StoredConfig{
+		Configuration: apiConfig,
+	}
+
+	key := config.GetCompositeKey()
+	assert.Equal(t, "TestMediation:v1.0", key)
+}
+
+func TestStoredConfig_MediationApi_GetDisplayName(t *testing.T) {
+	apiConfig := api.APIConfiguration{
+		Kind: api.MediationApi,
+	}
+	spec := api.MediationAPIData{
+		DisplayName: "TestMediation",
+		Version:     "v1.0",
+		Context:     "/mediation",
+		Entrypoints: []api.MediationEntrypoint{{Name: "ws-in"}},
+	}
+	apiConfig.Spec.FromMediationAPIData(spec)
+
+	config := &StoredConfig{
+		Configuration: apiConfig,
+	}
+
+	assert.Equal(t, "TestMediation", config.GetDisplayName())
+}
+
+func TestStoredConfig_MediationApi_GetVersion(t *testing.T) {
+	apiConfig := api.APIConfiguration{
+		Kind: api.MediationApi,
+	}
+	spec := api.MediationAPIData{
+		DisplayName: "TestMediation",
+		Version:     "v2.0",
+		Context:     "/mediation",
+		Entrypoints: []api.MediationEntrypoint{{Name: "ws-in"}},
+	}
+	apiConfig.Spec.FromMediationAPIData(spec)
+
+	config := &StoredConfig{
+		Configuration: apiConfig,
+	}
+
+	assert.Equal(t, "v2.0", config.GetVersion())
+}
+
+func TestStoredConfig_MediationApi_GetContext(t *testing.T) {
+	apiConfig := api.APIConfiguration{
+		Kind: api.MediationApi,
+	}
+	spec := api.MediationAPIData{
+		DisplayName: "TestMediation",
+		Version:     "v1.0",
+		Context:     "/my-mediation",
+		Entrypoints: []api.MediationEntrypoint{{Name: "ws-in"}},
+	}
+	apiConfig.Spec.FromMediationAPIData(spec)
+
+	config := &StoredConfig{
+		Configuration: apiConfig,
+	}
+
+	assert.Equal(t, "/my-mediation", config.GetContext())
+}
+
+func TestStoredConfig_MediationApi_GetPolicies(t *testing.T) {
+	apiConfig := api.APIConfiguration{
+		Kind: api.MediationApi,
+	}
+	policies := []api.Policy{
+		{Name: "test-policy", Version: "v1.0"},
+	}
+	spec := api.MediationAPIData{
+		DisplayName: "TestMediation",
+		Version:     "v1.0",
+		Context:     "/mediation",
+		Entrypoints: []api.MediationEntrypoint{{Name: "ws-in"}},
+		Policies:    &policies,
+	}
+	apiConfig.Spec.FromMediationAPIData(spec)
+
+	config := &StoredConfig{
+		Configuration: apiConfig,
+	}
+
+	got := config.GetPolicies()
+	assert.NotNil(t, got)
+	assert.Len(t, *got, 1)
+	assert.Equal(t, "test-policy", (*got)[0].Name)
+}
+
+func TestStoredConfig_MediationApi_GetPolicies_Nil(t *testing.T) {
+	apiConfig := api.APIConfiguration{
+		Kind: api.MediationApi,
+	}
+	spec := api.MediationAPIData{
+		DisplayName: "TestMediation",
+		Version:     "v1.0",
+		Context:     "/mediation",
+		Entrypoints: []api.MediationEntrypoint{{Name: "ws-in"}},
+	}
+	apiConfig.Spec.FromMediationAPIData(spec)
+
+	config := &StoredConfig{
+		Configuration: apiConfig,
+	}
+
+	got := config.GetPolicies()
+	assert.Nil(t, got)
+}

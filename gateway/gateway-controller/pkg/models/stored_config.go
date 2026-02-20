@@ -57,6 +57,13 @@ func (c *StoredConfig) GetCompositeKey() string {
 		}
 		return fmt.Sprintf("%s:%s", asyncData.DisplayName, asyncData.Version)
 	}
+	if c.Configuration.Kind == api.MediationApi {
+		medData, err := c.Configuration.Spec.AsMediationAPIData()
+		if err != nil {
+			return ""
+		}
+		return fmt.Sprintf("%s:%s", medData.DisplayName, medData.Version)
+	}
 	configData, err := c.Configuration.Spec.AsAPIConfigData()
 	if err != nil {
 		return ""
@@ -72,6 +79,13 @@ func (c *StoredConfig) GetDisplayName() string {
 			return ""
 		}
 		return asyncData.DisplayName
+	}
+	if c.Configuration.Kind == api.MediationApi {
+		medData, err := c.Configuration.Spec.AsMediationAPIData()
+		if err != nil {
+			return ""
+		}
+		return medData.DisplayName
 	}
 	configData, err := c.Configuration.Spec.AsAPIConfigData()
 	if err != nil {
@@ -94,6 +108,13 @@ func (c *StoredConfig) GetVersion() string {
 		}
 		return asyncData.Version
 	}
+	if c.Configuration.Kind == api.MediationApi {
+		medData, err := c.Configuration.Spec.AsMediationAPIData()
+		if err != nil {
+			return ""
+		}
+		return medData.Version
+	}
 	configData, err := c.Configuration.Spec.AsAPIConfigData()
 	if err != nil {
 		return ""
@@ -110,6 +131,13 @@ func (c *StoredConfig) GetContext() string {
 		}
 		return asyncData.Context
 	}
+	if c.Configuration.Kind == api.MediationApi {
+		medData, err := c.Configuration.Spec.AsMediationAPIData()
+		if err != nil {
+			return ""
+		}
+		return medData.Context
+	}
 	configData, err := c.Configuration.Spec.AsAPIConfigData()
 	if err != nil {
 		return ""
@@ -124,6 +152,12 @@ func (c *StoredConfig) GetPolicies() *[]api.Policy {
 			return nil
 		}
 		return httpData.Policies
+	} else if c.Configuration.Kind == api.MediationApi {
+		medData, err := c.Configuration.Spec.AsMediationAPIData()
+		if err != nil {
+			return nil
+		}
+		return medData.Policies
 	} else {
 		// TODO: enable when policies are supported for WebSubHub
 	}

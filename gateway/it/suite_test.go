@@ -70,9 +70,9 @@ func TestFeatures(t *testing.T) {
 		TestSuiteInitializer: InitializeTestSuite,
 		ScenarioInitializer:  InitializeScenario,
 		Options: &godog.Options{
-			Strict: true,
-			Format: "pretty",
-			Paths: getFeaturePaths(),
+			Strict:   true,
+			Format:   "pretty",
+			Paths:    getFeaturePaths(),
 			TestingT: t,
 		},
 	}
@@ -128,6 +128,7 @@ func getFeaturePaths() []string {
 		"features/policy-engine-admin.feature",
 		"features/cel-conditions.feature",
 		"features/analytics-basic.feature",
+		"features/mediation_deploy.feature",
 	}
 
 	raw := strings.TrimSpace(os.Getenv("IT_FEATURE_PATHS"))

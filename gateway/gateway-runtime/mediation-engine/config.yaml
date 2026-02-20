@@ -1,16 +1,12 @@
 entrypoints:
   - name: ws-inbound
     type: websocket
-    port: 8066
   - name: sse-feed
     type: sse
-    port: 8067
   - name: webhook-receiver
     type: http_post
-    port: 8068
   - name: polling-api
     type: http_get
-    port: 8069
 
 endpoints:
   - name: kafka-main

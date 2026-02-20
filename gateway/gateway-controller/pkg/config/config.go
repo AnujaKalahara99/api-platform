@@ -217,12 +217,13 @@ type RouterConfig struct {
 	Lua           RouterLuaConfig  `koanf:"lua"`
 	LuaScriptPath string           `koanf:"lua_script_path"` // Deprecated: use router.lua.request_transformation.script_path
 	// Upstream holds upstream-side configuration (TLS and timeouts: route, idle, connect)
-	Upstream           RouterUpstream     `koanf:"upstream"`
-	PolicyEngine       PolicyEngineConfig `koanf:"policy_engine"`
-	DownstreamTLS      DownstreamTLS      `koanf:"downstream_tls"`
-	EventGateway       EventGatewayConfig `koanf:"event_gateway"`
-	VHosts             VHostsConfig       `koanf:"vhosts"`
-	TracingServiceName string             `koanf:"tracing_service_name"`
+	Upstream           RouterUpstream        `koanf:"upstream"`
+	PolicyEngine       PolicyEngineConfig    `koanf:"policy_engine"`
+	MediationEngine    MediationEngineConfig `koanf:"mediation_engine"`
+	DownstreamTLS      DownstreamTLS         `koanf:"downstream_tls"`
+	EventGateway       EventGatewayConfig    `koanf:"event_gateway"`
+	VHosts             VHostsConfig          `koanf:"vhosts"`
+	TracingServiceName string                `koanf:"tracing_service_name"`
 
 	// HTTPListener configuration
 	HTTPListener HTTPListenerConfig `koanf:"http_listener"`
@@ -323,6 +324,15 @@ type PolicyEngineTLS struct {
 	CAPath     string `koanf:"ca_path"`     // Path to CA certificate for server validation
 	ServerName string `koanf:"server_name"` // SNI server name (optional, defaults to host)
 	SkipVerify bool   `koanf:"skip_verify"` // Skip server certificate verification (insecure, dev only)
+}
+
+// MediationEngineConfig holds mediation engine cluster configuration
+type MediationEngineConfig struct {
+	Enabled    bool   `koanf:"enabled"`     // Enable mediation engine cluster in xDS
+	Mode       string `koanf:"mode"`        // Connection mode: "uds" (default) or "tcp"
+	Host       string `koanf:"host"`        // Mediation engine hostname/IP (TCP mode only)
+	Port       uint32 `koanf:"port"`        // Mediation engine port (TCP mode only)
+	SocketPath string `koanf:"socket_path"` // UDS socket path (defaults to standard path)
 }
 
 // AccessLogsConfig holds access log configuration
@@ -561,6 +571,11 @@ func defaultConfig() *Config {
 						ServerName: "",
 						SkipVerify: false,
 					},
+				},
+				MediationEngine: MediationEngineConfig{
+					Enabled:    false,
+					Mode:       "uds",
+					SocketPath: "",
 				},
 				VHosts: VHostsConfig{
 					Main:    VHostEntry{Default: "*"},

@@ -1809,13 +1809,15 @@ components:
           enum:
             - RestApi
             - WebSubApi
+            - MediationApi
         metadata:
           $ref: "#/components/schemas/Metadata"
         spec:
-          description: API configuration payload (REST or Async API variants)
+          description: API configuration payload (REST, Async, or Mediation API variants)
           anyOf:
             - $ref: '#/components/schemas/APIConfigData'
             - $ref: '#/components/schemas/WebhookAPIData'
+            - $ref: '#/components/schemas/MediationAPIData'
 
     Metadata:
       type: object
@@ -2151,6 +2153,66 @@ components:
           description: List of API-level policies applied to all operations unless overridden
           items:
             $ref: '#/components/schemas/Policy'
+
+    MediationAPIData:
+      type: object
+      required:
+        - displayName
+        - version
+        - context
+        - entrypoints
+      properties:
+        displayName:
+          type: string
+          description: Human-readable API name (must be URL-friendly)
+          minLength: 1
+          maxLength: 100
+          pattern: '^[a-zA-Z0-9\-_\. ]+$'
+          example: stock-ticker
+        version:
+          type: string
+          description: Semantic version of the API
+          pattern: '^v\d+\.\d+$'
+          example: v1.0
+        context:
+          type: string
+          description: Base path for all API routes (must start with /, no trailing slash)
+          pattern: '^\/[a-zA-Z0-9_\-\/]*[^\/]$'
+          minLength: 1
+          maxLength: 200
+          example: /stock
+        vhosts:
+          type: object
+          required:
+            - main
+          description: Custom virtual hosts/domains for the API
+          properties:
+            main:
+              type: string
+              description: Custom virtual host/domain for production traffic
+              pattern: '^[a-zA-Z0-9\.\-]+$'
+              example: api.example.com
+        entrypoints:
+          type: array
+          description: List of mediation engine entrypoint names to expose via this API
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/MediationEntrypoint'
+        policies:
+          type: array
+          description: List of API-level policies
+          items:
+            $ref: '#/components/schemas/Policy'
+
+    MediationEntrypoint:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Name of the mediation engine entrypoint (must match a configured entrypoint)
+          example: ws-inbound
 
     # AsyncAPI-inspired server definition used when kind is async/* or http/websub.
     # Simplified mapping of AsyncAPI 2.x Server Object into OpenAPI.

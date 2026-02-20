@@ -21,6 +21,7 @@ package xds
 import (
 	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -355,7 +356,7 @@ func testRouterConfig() *config.RouterConfig {
 			Timeouts: config.UpstreamTimeouts{
 				RouteTimeoutInMs:     60000,
 				RouteIdleTimeoutInMs: 300000,
-				ConnectTimeoutInMs:  5000,
+				ConnectTimeoutInMs:   5000,
 			},
 		},
 		PolicyEngine: config.PolicyEngineConfig{
@@ -1811,4 +1812,236 @@ func TestTranslator_CreateDynamicFwdListenerForWebSubHub(t *testing.T) {
 		assert.Equal(t, "0.0.0.0", listener.GetAddress().GetSocketAddress().GetAddress())
 		assert.Equal(t, core.SocketAddress_TCP, listener.GetAddress().GetSocketAddress().GetProtocol())
 	})
+}
+
+// --- MediationApi tests ---
+
+func createMediationAPIStoredConfig(displayName, version, context string, entrypoints []string) *models.StoredConfig {
+	spec := api.MediationAPIData{
+		DisplayName: displayName,
+		Version:     version,
+		Context:     context,
+		Entrypoints: make([]api.MediationEntrypoint, len(entrypoints)),
+	}
+	for i, name := range entrypoints {
+		spec.Entrypoints[i] = api.MediationEntrypoint{Name: name}
+	}
+
+	apiConfig := api.APIConfiguration{
+		ApiVersion: api.APIConfigurationApiVersionGatewayApiPlatformWso2Comv1alpha1,
+		Kind:       api.MediationApi,
+		Metadata:   api.Metadata{Name: displayName},
+	}
+	apiConfig.Spec.FromMediationAPIData(spec)
+
+	return &models.StoredConfig{
+		ID:            "mediation-test-1",
+		Status:        models.StatusDeployed,
+		Configuration: apiConfig,
+	}
+}
+
+func TestTranslator_TranslateMediationAPIConfig(t *testing.T) {
+	t.Run("Single entrypoint generates correct route", func(t *testing.T) {
+		translator := createTestTranslator()
+		cfg := createMediationAPIStoredConfig("TestMediation", "v1.0", "/mediation", []string{"ws-in"})
+
+		routes, clusters, err := translator.translateMediationAPIConfig(cfg)
+		require.NoError(t, err)
+
+		// Should produce one route per entrypoint
+		assert.Len(t, routes, 1)
+		// No clusters returned — centrally created
+		assert.Nil(t, clusters)
+
+		r := routes[0]
+		assert.Contains(t, r.Name, "MEDIATION")
+		assert.Contains(t, r.Name, "ws-in")
+
+		// Verify regex pattern
+		regexMatch := r.GetMatch().GetSafeRegex().GetRegex()
+		assert.Contains(t, regexMatch, "/mediation")
+		assert.Contains(t, regexMatch, "ws-in")
+
+		// The full pattern should be ^{context}/{entrypoint}(/.*)?$
+		assert.Equal(t, "^/mediation/ws-in(/.*)?$", regexMatch)
+
+		// Verify cluster
+		assert.Equal(t, constants.MediationEngineClusterName, r.GetRoute().GetCluster())
+
+		// Verify regex rewrite
+		assert.NotNil(t, r.GetRoute().GetRegexRewrite())
+		assert.Contains(t, r.GetRoute().GetRegexRewrite().GetSubstitution(), "ws-in")
+
+		// Verify WebSocket upgrade
+		upgrades := r.GetRoute().GetUpgradeConfigs()
+		assert.Len(t, upgrades, 1)
+		assert.Equal(t, "websocket", upgrades[0].GetUpgradeType())
+
+		// Verify streaming timeout (0 = no timeout)
+		assert.Equal(t, int64(0), r.GetRoute().GetTimeout().GetSeconds())
+
+		// Verify metadata
+		metadata := r.GetMetadata().GetFilterMetadata()
+		assert.Contains(t, metadata, constants.ExtProcMetadataNamespace)
+		fields := metadata[constants.ExtProcMetadataNamespace].GetFields()
+		assert.Equal(t, "MediationApi", fields["api_kind"].GetStringValue())
+		assert.Equal(t, "TestMediation", fields["api_name"].GetStringValue())
+		assert.Equal(t, "v1.0", fields["api_version"].GetStringValue())
+		assert.Equal(t, "/mediation", fields["api_context"].GetStringValue())
+		assert.Equal(t, "ws-in", fields["entrypoint"].GetStringValue())
+	})
+
+	t.Run("Multiple entrypoints generate multiple routes", func(t *testing.T) {
+		translator := createTestTranslator()
+		cfg := createMediationAPIStoredConfig("TestMediation", "v1.0", "/mediation",
+			[]string{"ws-in", "sse-in", "http-post"})
+
+		routes, _, err := translator.translateMediationAPIConfig(cfg)
+		require.NoError(t, err)
+		assert.Len(t, routes, 3)
+
+		expectedNames := map[string]bool{"ws-in": false, "sse-in": false, "http-post": false}
+		for _, r := range routes {
+			for name := range expectedNames {
+				if strings.Contains(r.Name, name) {
+					expectedNames[name] = true
+				}
+			}
+		}
+		for name, found := range expectedNames {
+			assert.True(t, found, "expected route for entrypoint %s", name)
+		}
+	})
+
+	t.Run("Custom vhost is used when specified", func(t *testing.T) {
+		translator := createTestTranslator()
+		spec := api.MediationAPIData{
+			DisplayName: "TestMediation",
+			Version:     "v1.0",
+			Context:     "/mediation",
+			Entrypoints: []api.MediationEntrypoint{{Name: "ws-in"}},
+			Vhosts: &struct {
+				Main string `json:"main" yaml:"main"`
+			}{Main: "custom.example.com"},
+		}
+
+		apiConfig := api.APIConfiguration{
+			ApiVersion: api.APIConfigurationApiVersionGatewayApiPlatformWso2Comv1alpha1,
+			Kind:       api.MediationApi,
+			Metadata:   api.Metadata{Name: "test"},
+		}
+		apiConfig.Spec.FromMediationAPIData(spec)
+
+		cfg := &models.StoredConfig{
+			ID:            "test-1",
+			Status:        models.StatusDeployed,
+			Configuration: apiConfig,
+		}
+
+		routes, _, err := translator.translateMediationAPIConfig(cfg)
+		require.NoError(t, err)
+		assert.Len(t, routes, 1)
+		assert.Contains(t, routes[0].Name, "custom.example.com")
+	})
+}
+
+func TestTranslator_CreateMediationEngineCluster_UDS(t *testing.T) {
+	translator := createTestTranslator()
+	translator.routerConfig.MediationEngine = config.MediationEngineConfig{
+		Enabled:    true,
+		Mode:       "uds",
+		SocketPath: "/var/run/test/mediation.sock",
+	}
+
+	c := translator.createMediationEngineCluster()
+	assert.Equal(t, constants.MediationEngineClusterName, c.GetName())
+	assert.Equal(t, cluster.Cluster_STATIC, c.GetType())
+
+	// Verify UDS pipe address
+	endpoints := c.GetLoadAssignment().GetEndpoints()
+	require.Len(t, endpoints, 1)
+	lbEndpoints := endpoints[0].GetLbEndpoints()
+	require.Len(t, lbEndpoints, 1)
+
+	pipe := lbEndpoints[0].GetEndpoint().GetAddress().GetPipe()
+	require.NotNil(t, pipe)
+	assert.Equal(t, "/var/run/test/mediation.sock", pipe.GetPath())
+}
+
+func TestTranslator_CreateMediationEngineCluster_UDS_DefaultSocketPath(t *testing.T) {
+	translator := createTestTranslator()
+	translator.routerConfig.MediationEngine = config.MediationEngineConfig{
+		Enabled: true,
+		Mode:    "uds",
+	}
+
+	c := translator.createMediationEngineCluster()
+	endpoints := c.GetLoadAssignment().GetEndpoints()
+	require.Len(t, endpoints, 1)
+
+	pipe := endpoints[0].GetLbEndpoints()[0].GetEndpoint().GetAddress().GetPipe()
+	require.NotNil(t, pipe)
+	assert.Equal(t, constants.DefaultMediationEngineSocketPath, pipe.GetPath())
+}
+
+func TestTranslator_CreateMediationEngineCluster_TCP(t *testing.T) {
+	translator := createTestTranslator()
+	translator.routerConfig.MediationEngine = config.MediationEngineConfig{
+		Enabled: true,
+		Mode:    "tcp",
+		Host:    "mediation-engine",
+		Port:    9090,
+	}
+
+	c := translator.createMediationEngineCluster()
+	assert.Equal(t, constants.MediationEngineClusterName, c.GetName())
+	assert.Equal(t, cluster.Cluster_STRICT_DNS, c.GetType())
+
+	// Verify TCP socket address
+	endpoints := c.GetLoadAssignment().GetEndpoints()
+	require.Len(t, endpoints, 1)
+
+	socketAddr := endpoints[0].GetLbEndpoints()[0].GetEndpoint().GetAddress().GetSocketAddress()
+	require.NotNil(t, socketAddr)
+	assert.Equal(t, "mediation-engine", socketAddr.GetAddress())
+	assert.Equal(t, uint32(9090), socketAddr.GetPortValue())
+}
+
+func TestTranslator_TranslateConfigs_MediationApi_IncludesMediationCluster(t *testing.T) {
+	translator := createTestTranslator()
+	translator.routerConfig.MediationEngine.Enabled = true
+	translator.routerConfig.MediationEngine.Mode = "uds"
+	translator.routerConfig.HTTPSEnabled = false
+
+	cfg := createMediationAPIStoredConfig("TestMediation", "v1.0", "/mediation", []string{"ws-in"})
+
+	resources, err := translator.TranslateConfigs([]*models.StoredConfig{cfg}, "test")
+	require.NoError(t, err)
+	assert.NotNil(t, resources)
+
+	// Verify mediation engine cluster exists
+	clusters := resources[resource.ClusterType]
+	clusterNames := make([]string, 0)
+	for _, c := range clusters {
+		clusterNames = append(clusterNames, c.(*cluster.Cluster).GetName())
+	}
+	assert.Contains(t, clusterNames, constants.MediationEngineClusterName)
+}
+
+func TestTranslator_TranslateConfigs_MediationApi_DisabledEngine(t *testing.T) {
+	translator := createTestTranslator()
+	translator.routerConfig.MediationEngine.Enabled = false
+	translator.routerConfig.HTTPSEnabled = false
+
+	cfg := createMediationAPIStoredConfig("TestMediation", "v1.0", "/mediation", []string{"ws-in"})
+
+	resources, err := translator.TranslateConfigs([]*models.StoredConfig{cfg}, "test")
+	require.NoError(t, err)
+
+	// Mediation engine cluster should NOT be present when disabled
+	clusters := resources[resource.ClusterType]
+	for _, c := range clusters {
+		assert.NotEqual(t, constants.MediationEngineClusterName, c.(*cluster.Cluster).GetName())
+	}
 }

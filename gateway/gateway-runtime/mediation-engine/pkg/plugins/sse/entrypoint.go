@@ -23,7 +23,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/internal/logging"
 	"github.com/wso2/api-platform/gateway/gateway-runtime/mediation-engine/pkg/core"
@@ -31,40 +30,24 @@ import (
 
 type Entrypoint struct {
 	name      string
-	port      int
 	manager   core.SessionManager
-	server    *http.Server
 	logger    *slog.Logger
 	packetLog *logging.PacketLogger
 	sessions  sync.Map
 }
 
-func New(name string, port int, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
-	return &Entrypoint{name: name, port: port, logger: logger, packetLog: packetLog}
+func New(name string, logger *slog.Logger, packetLog *logging.PacketLogger) *Entrypoint {
+	return &Entrypoint{name: name, logger: logger, packetLog: packetLog}
 }
 
 func (e *Entrypoint) Name() string { return e.name }
 func (e *Entrypoint) Type() string { return "sse" }
 
-func (e *Entrypoint) Start(ctx context.Context, manager core.SessionManager) error {
+func (e *Entrypoint) RegisterRoutes(mux *http.ServeMux, manager core.SessionManager) {
 	e.manager = manager
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", e.handleSSE)
-
-	e.server = &http.Server{Addr: fmt.Sprintf(":%d", e.port), Handler: mux}
-
-	go func() {
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		e.server.Shutdown(shutdownCtx)
-	}()
-
-	e.logger.Info("sse entrypoint starting", "name", e.name, "port", e.port)
-	if err := e.server.ListenAndServe(); err != http.ErrServerClosed {
-		return err
-	}
-	return nil
+	pattern := "/" + e.name
+	mux.HandleFunc(pattern, e.handleSSE)
+	e.logger.Info("sse entrypoint registered", "name", e.name, "pattern", pattern)
 }
 
 func (e *Entrypoint) Stop(ctx context.Context) error {
@@ -73,9 +56,6 @@ func (e *Entrypoint) Stop(ctx context.Context) error {
 		e.manager.DestroySession(sess.ClientID)
 		return true
 	})
-	if e.server != nil {
-		return e.server.Shutdown(ctx)
-	}
 	return nil
 }
 

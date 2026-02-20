@@ -33,7 +33,6 @@ type Config struct {
 type EntrypointConfig struct {
 	Name string `yaml:"name"`
 	Type string `yaml:"type"`
-	Port int    `yaml:"port"`
 }
 
 type EndpointConfig struct {
