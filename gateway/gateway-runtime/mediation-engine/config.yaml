@@ -12,22 +12,26 @@ endpoints:
   - name: kafka-main
     type: kafka
     config:
-      brokers: "host.docker.internal:9092"
-      # brokers: "pkc-619z3.us-east1.gcp.confluent.cloud:9092"
-      topic_in: "events-in"
-      # topic_in: "sample_data_orders"
+      brokers: "pkc-619z3.us-east1.gcp.confluent.cloud:9092"
+      topic_in: "sample_data_orders"
       topic_out: "events-out"
       group_id: "mediation"
-      # sasl_mechanism: "plain"
-      # sasl_username: "KSDHR7XRYKNG55M7"
-      # sasl_password: "cfltHk1fmRBMyJeXQ62tZ0PsTP6iAy4Gmhx1ANwTuTInqdDoS6abyV7k6iLfHDaw"
-      tls_enabled: "false"
-  - name: rabbitmq-orders
-    type: rabbitmq
-    config:
-      url: "amqp://guest:guest@localhost:5672/"
-      queue_in: "orders-in"
-      queue_out: "orders-out"
+      sasl_mechanism: "plain"
+      sasl_username: "KSDHR7XRYKNG55M7"
+      sasl_password: "cfltHk1fmRBMyJeXQ62tZ0PsTP6iAy4Gmhx1ANwTuTInqdDoS6abyV7k6iLfHDaw"
+      tls_enabled: "true"
+      # brokers: "host.docker.internal:9092"
+      # topic_in: "events-in"
+      # topic_out: "events-out"
+      # group_id: "mediation"
+      # tls_enabled: "false"
+
+  # - name: rabbitmq-orders
+  #   type: rabbitmq
+  #   config:
+  #     url: "amqp://guest:guest@localhost:5672/"
+  #     queue_in: "orders-in"
+  #     queue_out: "orders-out"
 
 routes:
   - source: ws-inbound
@@ -35,8 +39,8 @@ routes:
     direction: upstream
     delivery_guarantee: auto
     channel_size: 1
-  - source: webhook-receiver
-    target: rabbitmq-orders
-    direction: upstream
-    delivery_guarantee: at_least_once
-    channel_size: 10
+  # - source: webhook-receiver
+  #   target: rabbitmq-orders
+  #   direction: upstream
+  #   delivery_guarantee: at_least_once
+  #   channel_size: 10

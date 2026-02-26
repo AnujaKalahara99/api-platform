@@ -12,6 +12,10 @@ application_id = "<MOESIF_APPLICATION_ID>"
 [gateway_controller.router]
 gateway_host = "*"
 
+[gateway_controller.router.mediation_engine]
+enabled = false
+mode = "uds"
+
 [gateway_controller.router.access_logs]
 enabled = true
 

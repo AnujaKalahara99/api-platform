@@ -35,6 +35,7 @@ services:
       - APIP_GW_GATEWAY__CONTROLLER_METRICS_PORT=9091
       - APIP_GW_REGISTRATION_TOKEN=${GATEWAY_REGISTRATION_TOKEN:-}
       - APIP_GW_GATEWAY__CONTROLLER_CONTROLPLANE_HOST=${GATEWAY_CONTROLPLANE_HOST:-host.docker.internal:9243}
+      - APIP_GW_GATEWAY__CONTROLLER_ROUTER_MEDIATION__ENGINE_ENABLED=${MEDIATION_ENABLED:-false}
     volumes:
       - controller-data:/app/data
       - ./configs/config.toml:/etc/gateway-controller/config.toml:ro
@@ -63,7 +64,7 @@ services:
     environment:
       - GATEWAY_CONTROLLER_HOST=gateway-controller
       - LOG_LEVEL=info
-      - MEDIATION_ENABLED=${MEDIATION_ENABLED:-false}
+      - MEDIATION_ENABLED=${MEDIATION_ENABLED:-true}
       - MEDIATION_CONFIG_PATH=/etc/mediation/config.yaml
     volumes:
       - ./configs/config.toml:/etc/policy-engine/config.toml:ro
